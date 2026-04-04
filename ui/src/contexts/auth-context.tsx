@@ -8,9 +8,10 @@ import {
 } from 'react'
 
 import type { AuthProviderCatalog, CredentialProvider } from '@/lib/api'
+import { isDesktopMode } from '@/lib/desktop'
 import { withSubPath } from '@/lib/subpath'
 
-interface User {
+interface UserData {
   id: string
   username: string
   name: string
@@ -18,7 +19,9 @@ interface User {
   provider: string
   roles?: { name: string }[]
   sidebar_preference?: string
+}
 
+interface User extends UserData {
   isAdmin(): boolean
 
   Key(): string
@@ -27,6 +30,7 @@ interface User {
 interface AuthContextType {
   user: User | null
   isLoading: boolean
+  isLocalMode: boolean
   hasGlobalSidebarPreference: boolean
   globalSidebarPreference: string
   credentialProviders: CredentialProvider[]
@@ -59,11 +63,46 @@ interface AuthProviderProps {
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [isLocalMode, setIsLocalMode] = useState(false)
   const [globalSidebarPreference, setGlobalSidebarPreference] = useState('')
   const [credentialProviders, setCredentialProviders] = useState<
     CredentialProvider[]
   >([])
   const [oauthProviders, setOAuthProviders] = useState<string[]>([])
+
+  const attachUserHelpers = (rawUser: UserData): User => {
+    return {
+      ...rawUser,
+      isAdmin() {
+        return (
+          this.roles?.some((role: { name: string }) => role.name === 'admin') ||
+          false
+        )
+      },
+      Key() {
+        return this.username || this.id
+      },
+    }
+  }
+
+  const createLocalUser = (): User =>
+    attachUserHelpers({
+      id: 'local',
+      username: 'local',
+      name: 'Local User',
+      avatar_url: '',
+      provider: 'Local',
+      roles: [{ name: 'admin' }],
+    })
+
+  const normalizeLocalUser = (rawUser: UserData): User =>
+    attachUserHelpers({
+      ...rawUser,
+      username: 'local',
+      name: rawUser.name || 'Local User',
+      avatar_url: rawUser.avatar_url || '',
+      provider: 'Local',
+    })
 
   const loadProviders = async () => {
     try {
@@ -92,7 +131,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }
 
-  const checkAuth = async () => {
+  const checkAuth = async (localMode = isLocalMode) => {
     try {
       const response = await fetch(withSubPath('/api/auth/user'), {
         credentials: 'include',
@@ -100,26 +139,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       if (response.ok) {
         const data = await response.json()
-        const user = data.user as User
+        const user = localMode
+          ? normalizeLocalUser(data.user as UserData)
+          : attachUserHelpers(data.user as UserData)
         setGlobalSidebarPreference(String(data.globalSidebarPreference || ''))
-        user.isAdmin = function () {
-          return (
-            this.roles?.some(
-              (role: { name: string }) => role.name === 'admin'
-            ) || false
-          )
-        }
-        user.Key = function () {
-          return this.username || this.id
-        }
         setUser(user)
+      } else if (localMode) {
+        setUser(createLocalUser())
+        setGlobalSidebarPreference('')
       } else {
         setUser(null)
         setGlobalSidebarPreference('')
       }
     } catch (error) {
       console.error('Auth check failed:', error)
-      setUser(null)
+      setUser(localMode ? createLocalUser() : null)
       setGlobalSidebarPreference('')
     } finally {
       setIsLoading(false)
@@ -127,6 +161,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }
 
   const login = async (provider: string = 'github') => {
+    if (isLocalMode) {
+      return
+    }
     try {
       const response = await fetch(
         withSubPath(`/api/auth/login?provider=${provider}`),
@@ -152,6 +189,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     username: string,
     password: string
   ) => {
+    if (isLocalMode) {
+      return
+    }
     try {
       const response = await fetch(withSubPath(`/api/auth/login/${provider}`), {
         method: 'POST',
@@ -175,6 +215,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }
 
   const refreshToken = async () => {
+    if (isLocalMode) {
+      return
+    }
     try {
       const response = await fetch(withSubPath('/api/auth/refresh'), {
         method: 'POST',
@@ -186,12 +229,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
     } catch (error) {
       console.error('Token refresh failed:', error)
-      setUser(null)
-      window.location.href = withSubPath('/login')
+      throw error
     }
   }
 
   const logout = async () => {
+    if (isLocalMode) {
+      return
+    }
     try {
       const response = await fetch(withSubPath('/api/auth/logout'), {
         method: 'POST',
@@ -212,15 +257,24 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   useEffect(() => {
     const initAuth = async () => {
-      await loadProviders()
-      await checkAuth()
+      const desktopMode = await isDesktopMode().catch(() => false)
+      setIsLocalMode(desktopMode)
+
+      if (!desktopMode) {
+        await loadProviders()
+      } else {
+        setCredentialProviders([])
+        setOAuthProviders([])
+      }
+
+      await checkAuth(desktopMode)
     }
     initAuth()
   }, [])
 
   // Set up automatic token refresh
   useEffect(() => {
-    if (!user) return
+    if (!user || isLocalMode) return
     const refreshKey = 'lastRefreshTokenAt'
     const lastRefreshAt = localStorage.getItem(refreshKey)
     const now = Date.now()
@@ -240,13 +294,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
     ) // Refresh every 30 minutes
 
     return () => clearInterval(refreshInterval)
-  }, [user])
+  }, [isLocalMode, user])
 
   const hasGlobalSidebarPreference = globalSidebarPreference.trim() !== ''
 
   const value = {
     user,
     isLoading,
+    isLocalMode,
     hasGlobalSidebarPreference,
     globalSidebarPreference,
     credentialProviders,
