@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 
+import { apiClient } from '../api-client'
 import { fetchAPI } from './shared'
 
 // Version information
@@ -11,8 +12,33 @@ export interface VersionInfo {
   releaseUrl: string
 }
 
+export interface UpdateCheckInfo {
+  currentVersion: string
+  latestVersion: string
+  comparison: 'update_available' | 'up_to_date' | 'local_newer' | 'uncomparable'
+  hasNewVersion: boolean
+  releaseUrl: string
+  releaseNotes: string
+  publishedAt: string
+  ignored: boolean
+  assetAvailable: boolean
+  asset?: {
+    name: string
+    downloadUrl: string
+    contentType?: string
+    size?: number
+  }
+  checkedAt: string
+}
+
 export const fetchVersionInfo = (): Promise<VersionInfo> => {
   return fetchAPI<VersionInfo>('/version')
+}
+
+export const checkVersionUpdate = (
+  force: boolean = true
+): Promise<UpdateCheckInfo> => {
+  return apiClient.post<UpdateCheckInfo>('/version/check-update', { force })
 }
 
 export const useVersionInfo = () => {
