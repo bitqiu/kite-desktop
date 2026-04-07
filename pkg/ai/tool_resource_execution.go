@@ -20,10 +20,14 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-func recordResourceHistory(cs *cluster.ClientSet, user pkgmodel.User, kind, name, namespace, opType, resourceYAML, previousYAML string, success bool, err error) {
+func recordResourceHistory(cs *cluster.ClientSet, kind, name, namespace, opType, resourceYAML, previousYAML string, success bool, err error) {
 	errMsg := ""
 	if err != nil {
 		errMsg = err.Error()
+	}
+	operatorID := uint(0)
+	if ensuredUser, ensuredErr := pkgmodel.EnsureLocalDesktopUser(); ensuredErr == nil {
+		operatorID = ensuredUser.ID
 	}
 
 	history := pkgmodel.ResourceHistory{
@@ -37,7 +41,7 @@ func recordResourceHistory(cs *cluster.ClientSet, user pkgmodel.User, kind, name
 		PreviousYAML:    previousYAML,
 		Success:         success,
 		ErrorMessage:    errMsg,
-		OperatorID:      user.ID,
+		OperatorID:      operatorID,
 	}
 	if dbErr := pkgmodel.DB.Create(&history).Error; dbErr != nil {
 		klog.Errorf("Failed to create resource history: %v", dbErr)
@@ -560,7 +564,7 @@ func executeGetClusterOverview(ctx context.Context, cs *cluster.ClientSet) (stri
 	return sb.String(), false
 }
 
-func executeCreateResource(ctx context.Context, cs *cluster.ClientSet, user pkgmodel.User, args map[string]interface{}) (string, bool) {
+func executeCreateResource(ctx context.Context, cs *cluster.ClientSet, args map[string]interface{}) (string, bool) {
 	obj, err := parseResourceYAML(args)
 	if err != nil {
 		return "Error: " + err.Error(), true
@@ -570,7 +574,7 @@ func executeCreateResource(ctx context.Context, cs *cluster.ClientSet, user pkgm
 	resource := resolveResourceInfoForObject(ctx, cs, obj)
 	err = cs.K8sClient.Create(ctx, obj)
 
-	recordResourceHistory(cs, user, resource.Resource, obj.GetName(), obj.GetNamespace(), "create", yamlStr, "", err == nil, err)
+	recordResourceHistory(cs, resource.Resource, obj.GetName(), obj.GetNamespace(), "create", yamlStr, "", err == nil, err)
 
 	if err != nil {
 		return fmt.Sprintf("Error creating %s/%s: %v", obj.GetKind(), obj.GetName(), err), true
@@ -580,7 +584,7 @@ func executeCreateResource(ctx context.Context, cs *cluster.ClientSet, user pkgm
 	return fmt.Sprintf("Successfully created %s/%s", obj.GetKind(), obj.GetName()), false
 }
 
-func executeUpdateResource(ctx context.Context, cs *cluster.ClientSet, user pkgmodel.User, args map[string]interface{}) (string, bool) {
+func executeUpdateResource(ctx context.Context, cs *cluster.ClientSet, args map[string]interface{}) (string, bool) {
 	obj, err := parseResourceYAML(args)
 	if err != nil {
 		return "Error: " + err.Error(), true
@@ -602,7 +606,7 @@ func executeUpdateResource(ctx context.Context, cs *cluster.ClientSet, user pkgm
 
 	err = cs.K8sClient.Update(ctx, obj)
 
-	recordResourceHistory(cs, user, resource.Resource, obj.GetName(), obj.GetNamespace(), "update", yamlStr, previousYAML, err == nil, err)
+	recordResourceHistory(cs, resource.Resource, obj.GetName(), obj.GetNamespace(), "update", yamlStr, previousYAML, err == nil, err)
 
 	if err != nil {
 		return fmt.Sprintf("Error updating %s/%s: %v", obj.GetKind(), obj.GetName(), err), true
@@ -612,7 +616,7 @@ func executeUpdateResource(ctx context.Context, cs *cluster.ClientSet, user pkgm
 	return fmt.Sprintf("Successfully updated %s/%s", obj.GetKind(), obj.GetName()), false
 }
 
-func executePatchResource(ctx context.Context, cs *cluster.ClientSet, user pkgmodel.User, args map[string]interface{}) (string, bool) {
+func executePatchResource(ctx context.Context, cs *cluster.ClientSet, args map[string]interface{}) (string, bool) {
 	kind, err := getRequiredString(args, "kind")
 	if err != nil {
 		return "Error: " + err.Error(), true
@@ -654,7 +658,7 @@ func executePatchResource(ctx context.Context, cs *cluster.ClientSet, user pkgmo
 		currentYAML = objectToYAML(obj)
 	}
 
-	recordResourceHistory(cs, user, resource.Resource, name, normalizeNamespace(resource, namespace), "patch", currentYAML, previousYAML, err == nil, err)
+	recordResourceHistory(cs, resource.Resource, name, normalizeNamespace(resource, namespace), "patch", currentYAML, previousYAML, err == nil, err)
 
 	if err != nil {
 		return fmt.Sprintf("Error patching %s/%s: %v", resource.Kind, name, err), true
@@ -664,7 +668,7 @@ func executePatchResource(ctx context.Context, cs *cluster.ClientSet, user pkgmo
 	return fmt.Sprintf("Successfully patched %s/%s", resource.Kind, name), false
 }
 
-func executeDeleteResource(ctx context.Context, cs *cluster.ClientSet, user pkgmodel.User, args map[string]interface{}) (string, bool) {
+func executeDeleteResource(ctx context.Context, cs *cluster.ClientSet, args map[string]interface{}) (string, bool) {
 	kind, err := getRequiredString(args, "kind")
 	if err != nil {
 		return "Error: " + err.Error(), true
@@ -695,7 +699,7 @@ func executeDeleteResource(ctx context.Context, cs *cluster.ClientSet, user pkgm
 	previousYAML = objectToYAML(obj)
 	err = cs.K8sClient.Delete(ctx, obj)
 
-	recordResourceHistory(cs, user, resource.Resource, name, normalizeNamespace(resource, namespace), "delete", "", previousYAML, err == nil || apierrors.IsNotFound(err), err)
+	recordResourceHistory(cs, resource.Resource, name, normalizeNamespace(resource, namespace), "delete", "", previousYAML, err == nil || apierrors.IsNotFound(err), err)
 
 	if err != nil {
 		if apierrors.IsNotFound(err) {
