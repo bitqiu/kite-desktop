@@ -7,22 +7,22 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: Git ref to build for manual validation
+        description: 手动验证时要构建的 Git 引用，选填；可填写分支、Tag 或提交 SHA，默认 main
         required: false
         default: main
         type: string
       tag_name:
-        description: Optional label used in artifact filenames and release metadata
+        description: 手动触发时用于产物文件名和发布标识的标签名，选填；不填则自动生成 manual-运行号-短SHA
         required: false
         default: ""
         type: string
       version:
-        description: Optional desktop app version to write into build metadata during manual runs
+        description: 手动触发时写入桌面端构建元数据的版本号，选填；如不填则优先从 tag_name 推断，否则自动生成 0.0.运行号
         required: false
         default: ""
         type: string
       publish_release:
-        description: Publish a GitHub Release after a manual run
+        description: 手动触发后是否自动创建 GitHub Release，非必填；默认 false，仅做构建验证与产物上传
         required: false
         default: false
         type: boolean
