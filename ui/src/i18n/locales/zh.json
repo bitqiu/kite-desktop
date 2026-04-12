@@ -57,16 +57,24 @@
   "globalSearch": {
     "title": "全局搜索",
     "description": "搜索所有 Kubernetes 资源",
+    "clusterTitle": "切换集群",
+    "clusterDescription": "快速切换当前工作集群",
     "placeholder": "搜索资源...",
+    "clusterPlaceholder": "搜索集群名称...",
     "searching": "搜索中...",
-    "emptyHint": "输入至少 3 个字符进行搜索或查看下面的收藏...",
+    "emptyHint": "搜索资源，或直接选择下面的快捷操作...",
     "favorites": "收藏",
     "resources": "资源",
     "noResults": "未找到结果",
+    "noClusterResults": "未找到匹配的集群",
     "navigation": "导航",
     "hidden": "已隐藏",
     "actions": "操作",
+    "clusters": "集群",
+    "current": "当前",
+    "clusterReady": "可切换",
     "toggleTheme": "切换主题",
+    "switchClusterMode": "切换集群...",
     "switchCluster": "切换到集群 {{name}}"
   },
   "log": {
@@ -295,7 +303,9 @@
     "select": "选择集群",
     "default": "默认",
     "syncError": "同步错误",
-    "noneAvailable": "尚未配置集群"
+    "noneAvailable": "尚未配置集群",
+    "quickSwitch": "快速切换",
+    "quickSwitchHint": "快速切换集群：⌘⇧K"
   },
   "resourceTable": {
     "errorLoading": "加载 {{resourceName}} 时出错",

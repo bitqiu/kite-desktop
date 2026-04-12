@@ -12,7 +12,7 @@ export function Search() {
     <Button
       variant="outline"
       className="flex items-center gap-2 px-3 py-2 h-9 w-64 justify-start text-muted-foreground border-border/50"
-      onClick={openSearch}
+      onClick={() => openSearch()}
     >
       <SearchIcon className="h-4 w-4" />
       <span className="flex-1 text-left">{t('searchButton.placeholder')}</span>

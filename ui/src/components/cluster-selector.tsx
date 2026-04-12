@@ -12,6 +12,11 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 
 export function ClusterSelector() {
   const { t } = useTranslation()
@@ -40,25 +45,35 @@ export function ClusterSelector() {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="flex items-center gap-2 h-8 px-3 max-w-full focus-visible:ring-0 focus-visible:border-transparent"
-          disabled={isSwitching}
-        >
-          <IconServer className="h-4 w-4" />
-          <span className="text-sm font-medium truncate">
-            {isSwitching
-              ? t('clusterSelector.switching')
-              : currentClusterData?.name ||
-                (clusters.length === 0
-                  ? t('clusterSelector.noneAvailable', 'No clusters configured')
-                  : t('clusterSelector.select'))}
-          </span>
-          <IconChevronDown className="h-3 w-3 opacity-50" />
-        </Button>
-      </DropdownMenuTrigger>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="flex items-center gap-2 h-8 px-3 max-w-full focus-visible:ring-0 focus-visible:border-transparent"
+              disabled={isSwitching}
+            >
+              <IconServer className="h-4 w-4" />
+              <span className="text-sm font-medium truncate">
+                {isSwitching
+                  ? t('clusterSelector.switching')
+                  : currentClusterData?.name ||
+                    (clusters.length === 0
+                      ? t(
+                          'clusterSelector.noneAvailable',
+                          'No clusters configured'
+                        )
+                      : t('clusterSelector.select'))}
+              </span>
+              <IconChevronDown className="h-3 w-3 opacity-50" />
+            </Button>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent side="top">
+          {t('clusterSelector.quickSwitchHint')}
+        </TooltipContent>
+      </Tooltip>
       <DropdownMenuContent align="end" className="w-60">
         {clusters.length === 0 ? (
           <>
@@ -69,6 +84,14 @@ export function ClusterSelector() {
               {t('cluster.goToSettings', 'Go to cluster settings')}
             </DropdownMenuItem>
           </>
+        ) : null}
+        {clusters.length > 0 ? (
+          <DropdownMenuLabel className="flex items-center justify-between gap-2">
+            <span>{t('clusterSelector.quickSwitch')}</span>
+            <kbd className="bg-muted text-muted-foreground pointer-events-none flex h-5 items-center justify-center rounded border px-1 font-sans text-[0.7rem] font-medium">
+              ⌘⇧K
+            </kbd>
+          </DropdownMenuLabel>
         ) : null}
         {clusters.map((cluster) => (
           <DropdownMenuItem

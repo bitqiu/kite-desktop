@@ -6,6 +6,8 @@ import { toast } from 'sonner'
 import { Cluster } from '@/types/api'
 import { withSubPath } from '@/lib/subpath'
 
+const recentClustersStorageKey = 'recent-clusters'
+
 interface ClusterContextType {
   clusters: Cluster[]
   currentCluster: string | null
@@ -27,6 +29,20 @@ export const ClusterProvider: React.FC<{ children: React.ReactNode }> = ({
   )
   const queryClient = useQueryClient()
   const [isSwitching, setIsSwitching] = useState(false)
+
+  const saveRecentCluster = (clusterName: string) => {
+    const recentClusters = JSON.parse(
+      localStorage.getItem(recentClustersStorageKey) || '[]'
+    ) as string[]
+    const nextRecentClusters = [
+      clusterName,
+      ...recentClusters.filter((name) => name !== clusterName),
+    ].slice(0, 8)
+    localStorage.setItem(
+      recentClustersStorageKey,
+      JSON.stringify(nextRecentClusters)
+    )
+  }
 
   useEffect(() => {
     if (currentCluster) {
@@ -111,6 +127,7 @@ export const ClusterProvider: React.FC<{ children: React.ReactNode }> = ({
         setIsSwitching(true)
         setCurrentClusterState(clusterName)
         localStorage.setItem('current-cluster', clusterName)
+        saveRecentCluster(clusterName)
         document.cookie = `x-cluster-name=${clusterName}; path=/`
         setTimeout(async () => {
           await queryClient.invalidateQueries({

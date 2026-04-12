@@ -39,16 +39,24 @@
   "globalSearch": {
     "title": "Global Search",
     "description": "Search across all Kubernetes resources",
+    "clusterTitle": "Switch Cluster",
+    "clusterDescription": "Quickly switch the active cluster",
     "placeholder": "Search resources...",
+    "clusterPlaceholder": "Search clusters...",
     "searching": "Searching...",
-    "emptyHint": "Type at least 3 characters to search or see favorites below...",
+    "emptyHint": "Search resources or pick a quick action below...",
     "favorites": "Favorites",
     "resources": "Resources",
     "noResults": "No results found",
+    "noClusterResults": "No matching clusters found",
     "navigation": "Navigation",
     "hidden": "Hidden",
     "actions": "Actions",
+    "clusters": "Clusters",
+    "current": "Current",
+    "clusterReady": "Ready to switch",
     "toggleTheme": "Toggle Theme",
+    "switchClusterMode": "Switch Cluster...",
     "switchCluster": "Switch to cluster {{name}}"
   },
   "sidebar": {
@@ -269,7 +277,9 @@
     "select": "Select Cluster",
     "default": "Default",
     "syncError": "Sync Error",
-    "noneAvailable": "No clusters configured"
+    "noneAvailable": "No clusters configured",
+    "quickSwitch": "Quick Switch",
+    "quickSwitchHint": "Quick switch clusters: ⌘⇧K"
   },
   "resourceTable": {
     "errorLoading": "Error loading {{resourceName}}",

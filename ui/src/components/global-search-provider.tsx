@@ -8,11 +8,14 @@ import {
   useState,
 } from 'react'
 
+export type GlobalSearchMode = 'all' | 'cluster'
+
 interface GlobalSearchContextType {
   isOpen: boolean
-  openSearch: () => void
+  mode: GlobalSearchMode
+  openSearch: (mode?: GlobalSearchMode) => void
   closeSearch: () => void
-  toggleSearch: () => void
+  toggleSearch: (mode?: GlobalSearchMode) => void
 }
 
 const GlobalSearchContext = createContext<GlobalSearchContextType | undefined>(
@@ -35,17 +38,37 @@ interface GlobalSearchProviderProps {
 
 export function GlobalSearchProvider({ children }: GlobalSearchProviderProps) {
   const [isOpen, setIsOpen] = useState(false)
+  const [mode, setMode] = useState<GlobalSearchMode>('all')
 
-  const openSearch = () => setIsOpen(true)
-  const closeSearch = () => setIsOpen(false)
-  const toggleSearch = useCallback(() => setIsOpen((prev) => !prev), [])
+  const openSearch = useCallback((nextMode: GlobalSearchMode = 'all') => {
+    setMode(nextMode)
+    setIsOpen(true)
+  }, [])
+
+  const closeSearch = useCallback(() => {
+    setIsOpen(false)
+    setMode('all')
+  }, [])
+
+  const toggleSearch = useCallback((nextMode: GlobalSearchMode = 'all') => {
+    setMode(nextMode)
+    setIsOpen((prev) => !prev)
+  }, [])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Command+K or Ctrl+K to open search
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+      // Command+Shift+K or Ctrl+Shift+K to open cluster switcher
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'k') {
         e.preventDefault()
-        toggleSearch()
+        openSearch('cluster')
+        return
+      }
+
+      // Command+K or Ctrl+K to open search
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        openSearch('all')
+        return
       }
 
       // Escape to close search
@@ -56,10 +79,11 @@ export function GlobalSearchProvider({ children }: GlobalSearchProviderProps) {
 
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [isOpen, toggleSearch])
+  }, [closeSearch, isOpen, openSearch])
 
   const value = {
     isOpen,
+    mode,
     openSearch,
     closeSearch,
     toggleSearch,
