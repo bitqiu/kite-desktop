@@ -62,7 +62,7 @@ function ClusterGate({ children }: { children: ReactNode }) {
 }
 
 function AppContent() {
-  const { isOpen, closeSearch } = useGlobalSearch()
+  const { isOpen, mode, closeSearch } = useGlobalSearch()
   const { isOpen: isTerminalOpen } = useTerminal()
   const [searchParams] = useSearchParams()
   const isIframe = searchParams.get('iframe') === 'true'
@@ -86,7 +86,7 @@ function AppContent() {
           </div>
         </SidebarInset>
       </SidebarProvider>
-      <GlobalSearch open={isOpen} onOpenChange={closeSearch} />
+      <GlobalSearch open={isOpen} mode={mode} onOpenChange={closeSearch} />
       {isTerminalOpen ? (
         <Suspense fallback={null}>
           <FloatingTerminal />

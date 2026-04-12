@@ -2,6 +2,7 @@ import { ComponentType, useCallback, useEffect, useMemo, useState } from 'react'
 import { useRuntime } from '@/contexts/runtime-context'
 import { useSidebarConfig } from '@/contexts/sidebar-config-context'
 import {
+  IconCheck,
   IconArrowsHorizontal,
   IconBox,
   IconBoxMultiple,
@@ -31,6 +32,7 @@ import { useNavigate } from 'react-router-dom'
 import { globalSearch, SearchResult } from '@/lib/api'
 import { useCluster } from '@/hooks/use-cluster'
 import { useFavorites } from '@/hooks/use-favorites'
+import { Cluster } from '@/types/api'
 import { Badge } from '@/components/ui/badge'
 import {
   Command,
@@ -39,6 +41,7 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
+  CommandShortcut,
 } from '@/components/ui/command'
 import {
   Dialog,
@@ -48,6 +51,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useAppearance } from '@/components/appearance-provider'
+import { GlobalSearchMode, useGlobalSearch } from './global-search-provider'
+
+const recentClustersStorageKey = 'recent-clusters'
 
 // Define resource types and their display properties
 const RESOURCE_CONFIG: Record<
@@ -98,22 +104,54 @@ interface ActionSearchItem {
   icon: React.ComponentType<{ className?: string }>
   searchText: string
   onSelect: () => void
+  defaultVisible?: boolean
+  closeOnSelect?: boolean
+  shortcut?: string
+}
+
+interface ClusterSearchItem {
+  id: string
+  cluster: Cluster
+  searchText: string
+  clusterNameText: string
+  subtitle: string
+  disabled: boolean
+  isCurrent: boolean
 }
 
 interface GlobalSearchProps {
   open: boolean
+  mode: GlobalSearchMode
   onOpenChange: (open: boolean) => void
 }
 
-export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
+function readRecentClusters(): string[] {
+  try {
+    return JSON.parse(
+      localStorage.getItem(recentClustersStorageKey) || '[]'
+    ) as string[]
+  } catch {
+    return []
+  }
+}
+
+function isClusterIntent(query: string) {
+  return ['cluster', 'clusters', 'switch', 'workspace', '集群', '切换'].some(
+    (term) => query.includes(term)
+  )
+}
+
+export function GlobalSearch({ open, mode, onOpenChange }: GlobalSearchProps) {
   const { t } = useTranslation()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResult[] | null>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [recentClusters, setRecentClusters] = useState<string[]>([])
   const navigate = useNavigate()
   const { isDesktop } = useRuntime()
   const { config, getIconComponent } = useSidebarConfig()
   const { setTheme, actualTheme } = useAppearance()
+  const { openSearch } = useGlobalSearch()
   const {
     clusters,
     currentCluster,
@@ -241,6 +279,10 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
   }, [config, getIconComponent, isDesktop, t])
 
   const sidebarResults = useMemo(() => {
+    if (mode === 'cluster') {
+      return []
+    }
+
     const trimmedQuery = query.trim().toLowerCase()
     if (!trimmedQuery) {
       return []
@@ -254,10 +296,28 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
         }
         return a.title.localeCompare(b.title)
       })
-  }, [query, sidebarItems])
+  }, [mode, query, sidebarItems])
 
   const actionItems: ActionSearchItem[] = useMemo(() => {
     return [
+      ...(clusters.length > 1
+        ? [
+            {
+              id: 'switch-cluster-mode',
+              label: t('globalSearch.switchClusterMode'),
+              icon: IconServer,
+              searchText:
+                'switch cluster clusters workspace env 集群 切换 工作区 环境'.toLocaleLowerCase(),
+              defaultVisible: true,
+              closeOnSelect: false,
+              shortcut: '⌘⇧K',
+              onSelect: () => {
+                setQuery('')
+                openSearch('cluster')
+              },
+            },
+          ]
+        : []),
       {
         id: 'toggle-theme',
         label: t('globalSearch.toggleTheme'),
@@ -265,47 +325,124 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
         searchText: 'toggle theme switch mode light dark'.toLocaleLowerCase(),
         onSelect: toggleTheme,
       },
-      ...(clusters.length > 1
-        ? clusters
-            .filter((cluster) => cluster.name !== currentCluster)
-            .map((cluster) => ({
-              id: `switch-cluster-${cluster.name}`,
-              label: t('globalSearch.switchCluster', { name: cluster.name }),
-              icon: IconServer,
-              searchText: `cluster ${cluster.name}`.toLocaleLowerCase(),
-              onSelect: () => {
-                if (
-                  isSwitching ||
-                  isClusterLoading ||
-                  cluster.name === currentCluster
-                ) {
-                  return
-                }
-                setCurrentCluster(cluster.name)
-              },
-            }))
-        : []),
     ]
   }, [
     actualTheme,
     clusters,
-    currentCluster,
-    isClusterLoading,
-    isSwitching,
-    setCurrentCluster,
     t,
     toggleTheme,
+    openSearch,
   ])
 
-  // Filter theme option based on query
   const actionResults = useMemo(() => {
-    const trimmedQuery = query.trim().toLowerCase()
-    if (!trimmedQuery) {
+    if (mode === 'cluster') {
       return []
     }
 
+    const trimmedQuery = query.trim().toLowerCase()
+    if (!trimmedQuery) {
+      return actionItems.filter((item) => item.defaultVisible)
+    }
+
     return actionItems.filter((item) => item.searchText.includes(trimmedQuery))
-  }, [actionItems, query])
+  }, [actionItems, mode, query])
+
+  const clusterResults = useMemo<ClusterSearchItem[]>(() => {
+    if (clusters.length === 0) {
+      return []
+    }
+
+    const recentClusterOrder = new Map(
+      recentClusters.map((clusterName, index) => [clusterName, index])
+    )
+
+    const sortedClusters = [...clusters].sort((left, right) => {
+      if (left.name === currentCluster) {
+        return -1
+      }
+      if (right.name === currentCluster) {
+        return 1
+      }
+
+      const leftRecentIndex = recentClusterOrder.get(left.name) ?? Infinity
+      const rightRecentIndex = recentClusterOrder.get(right.name) ?? Infinity
+      if (leftRecentIndex !== rightRecentIndex) {
+        return leftRecentIndex - rightRecentIndex
+      }
+
+      if (left.isDefault !== right.isDefault) {
+        return left.isDefault ? -1 : 1
+      }
+
+      return left.name.localeCompare(right.name)
+    })
+
+    const normalizedQuery = query.trim().toLowerCase()
+    const items = sortedClusters.map((cluster) => ({
+      id: `cluster-${cluster.name}`,
+      cluster,
+      clusterNameText: cluster.name.toLowerCase(),
+      searchText: [
+        cluster.name,
+        cluster.description,
+        cluster.version,
+        cluster.error,
+        cluster.isDefault ? 'default 默认' : '',
+        cluster.name === currentCluster ? 'current 当前' : '',
+        'cluster clusters switch 集群 切换',
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase(),
+      subtitle:
+        cluster.error ||
+        cluster.description ||
+        cluster.version ||
+        t('globalSearch.clusterReady'),
+      disabled:
+        !!cluster.error ||
+        isSwitching ||
+        isClusterLoading ||
+        cluster.name === currentCluster,
+      isCurrent: cluster.name === currentCluster,
+    }))
+
+    if (mode === 'cluster') {
+      if (!normalizedQuery) {
+        return items
+      }
+      return items.filter((item) =>
+        item.clusterNameText.includes(normalizedQuery)
+      )
+    }
+
+    if (!normalizedQuery) {
+      return []
+    }
+
+    const matches = items.filter((item) =>
+      item.searchText.includes(normalizedQuery)
+    )
+    if (matches.length === 0) {
+      return []
+    }
+
+    return isClusterIntent(normalizedQuery) ||
+      matches.some((item) =>
+        item.cluster.name.toLowerCase().includes(normalizedQuery)
+      )
+      ? matches
+      : []
+  }, [
+    clusters,
+    currentCluster,
+    isClusterLoading,
+    isSwitching,
+    mode,
+    query,
+    recentClusters,
+    t,
+  ])
 
   // Use favorites hook
   const {
@@ -348,6 +485,12 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
 
   // Debounce search calls
   useEffect(() => {
+    if (mode === 'cluster') {
+      setIsLoading(false)
+      setResults([])
+      return
+    }
+
     if (query.length > 0) {
       setResults(null)
     }
@@ -363,7 +506,7 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
     }, 300) // 300ms debounce
 
     return () => clearTimeout(timeoutId)
-  }, [query, performSearch, favorites])
+  }, [favorites, mode, performSearch, query])
 
   // Handle item selection
   const handleSelect = useCallback(
@@ -385,21 +528,64 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
   }, [open])
 
   useEffect(() => {
-    if (open && query === '') {
+    if (open) {
+      setRecentClusters(readRecentClusters())
+    }
+  }, [open, mode])
+
+  useEffect(() => {
+    if (open && query === '' && mode === 'all') {
       setResults(favorites) // Show favorites when dialog opens
     }
-  }, [open, query, favorites])
+  }, [favorites, mode, open, query])
+
+  const placeholder =
+    mode === 'cluster'
+      ? t('globalSearch.clusterPlaceholder')
+      : t('globalSearch.placeholder')
+
+  const title =
+    mode === 'cluster'
+      ? t('globalSearch.clusterTitle')
+      : t('globalSearch.title')
+
+  const description =
+    mode === 'cluster'
+      ? t('globalSearch.clusterDescription')
+      : t('globalSearch.description')
+
+  const handleClusterSelect = useCallback(
+    (clusterName: string) => {
+      if (
+        isSwitching ||
+        isClusterLoading ||
+        clusterName === currentCluster
+      ) {
+        return
+      }
+      setCurrentCluster(clusterName)
+      onOpenChange(false)
+      setQuery('')
+    },
+    [
+      currentCluster,
+      isClusterLoading,
+      isSwitching,
+      onOpenChange,
+      setCurrentCluster,
+    ]
+  )
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogHeader className="sr-only">
-        <DialogTitle>{t('globalSearch.title')}</DialogTitle>
-        <DialogDescription>{t('globalSearch.description')}</DialogDescription>
+        <DialogTitle>{title}</DialogTitle>
+        <DialogDescription>{description}</DialogDescription>
       </DialogHeader>
       <DialogContent className="max-w-4xl gap-0 overflow-hidden p-0 sm:p-0">
         <Command shouldFilter={false} className="rounded-none">
           <CommandInput
-            placeholder={t('globalSearch.placeholder')}
+            placeholder={placeholder}
             value={query}
             onValueChange={setQuery}
           />
@@ -410,6 +596,8 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
                   <IconLoader className="h-4 w-4 animate-spin" />
                   <span>{t('globalSearch.searching')}</span>
                 </div>
+              ) : mode === 'cluster' ? (
+                t('globalSearch.noClusterResults')
               ) : query.length < 2 ? (
                 t('globalSearch.emptyHint')
               ) : (
@@ -417,7 +605,7 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
               )}
             </CommandEmpty>
 
-            {sidebarResults.length > 0 && (
+            {mode !== 'cluster' && sidebarResults.length > 0 && (
               <CommandGroup heading={t('globalSearch.navigation')}>
                 {sidebarResults.map((item) => {
                   const Icon = item.Icon
@@ -453,7 +641,7 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
               </CommandGroup>
             )}
 
-            {actionResults.length > 0 && (
+            {mode !== 'cluster' && actionResults.length > 0 && (
               <CommandGroup heading={t('globalSearch.actions')}>
                 {actionResults.map((actionOption) => (
                   <CommandItem
@@ -461,8 +649,10 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
                     value={`${actionOption.label} theme toggle mode`}
                     onSelect={() => {
                       actionOption.onSelect()
-                      onOpenChange(false)
-                      setQuery('')
+                      if (actionOption.closeOnSelect !== false) {
+                        onOpenChange(false)
+                        setQuery('')
+                      }
                     }}
                     className="flex items-center gap-3 py-3"
                   >
@@ -481,12 +671,57 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
                         )}
                       </div>
                     </div>
+                    {actionOption.shortcut ? (
+                      <CommandShortcut>{actionOption.shortcut}</CommandShortcut>
+                    ) : null}
                   </CommandItem>
                 ))}
               </CommandGroup>
             )}
 
-            {results && results.length > 0 && (
+            {clusterResults.length > 0 && (
+              <CommandGroup heading={t('globalSearch.clusters')}>
+                {clusterResults.map((item) => (
+                  <CommandItem
+                    key={item.id}
+                    value={item.clusterNameText}
+                    disabled={item.disabled}
+                    onSelect={() => handleClusterSelect(item.cluster.name)}
+                    className="flex items-center gap-3 py-3"
+                  >
+                    <IconServer className="h-4 w-4 text-sidebar-primary" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{item.cluster.name}</span>
+                        {item.isCurrent ? (
+                          <Badge className="text-xs" variant="secondary">
+                            {t('globalSearch.current')}
+                          </Badge>
+                        ) : null}
+                        {item.cluster.isDefault ? (
+                          <Badge className="text-xs" variant="outline">
+                            {t('clusterSelector.default')}
+                          </Badge>
+                        ) : null}
+                        {item.cluster.error ? (
+                          <Badge className="text-xs" variant="destructive">
+                            {t('clusterSelector.syncError')}
+                          </Badge>
+                        ) : null}
+                      </div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {item.subtitle}
+                      </div>
+                    </div>
+                    {item.isCurrent ? (
+                      <IconCheck className="h-4 w-4 text-sidebar-primary" />
+                    ) : null}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+
+            {mode !== 'cluster' && results && results.length > 0 && (
               <CommandGroup
                 heading={
                   query.length < 2

@@ -28,13 +28,17 @@ vi.stubGlobal('localStorage', createStorage())
 vi.stubGlobal('sessionStorage', createStorage())
 
 function GlobalSearchConsumer() {
-  const { isOpen, openSearch, closeSearch } = useGlobalSearch()
+  const { isOpen, mode, openSearch, closeSearch } = useGlobalSearch()
 
   return (
     <div>
       <span data-testid="state">{isOpen ? 'open' : 'closed'}</span>
+      <span data-testid="mode">{mode}</span>
       <button type="button" onClick={openSearch}>
         open
+      </button>
+      <button type="button" onClick={() => openSearch('cluster')}>
+        cluster
       </button>
       <button type="button" onClick={closeSearch}>
         close
@@ -44,7 +48,7 @@ function GlobalSearchConsumer() {
 }
 
 describe('GlobalSearchProvider', () => {
-  it('toggles from the keyboard and closes on escape', async () => {
+  it('opens global search from the keyboard and closes on escape', async () => {
     render(
       <GlobalSearchProvider>
         <GlobalSearchConsumer />
@@ -52,17 +56,27 @@ describe('GlobalSearchProvider', () => {
     )
 
     expect(screen.getByTestId('state')).toHaveTextContent('closed')
+    expect(screen.getByTestId('mode')).toHaveTextContent('all')
 
     fireEvent.keyDown(document, { key: 'k', ctrlKey: true })
 
     await waitFor(() => {
       expect(screen.getByTestId('state')).toHaveTextContent('open')
+      expect(screen.getByTestId('mode')).toHaveTextContent('all')
+    })
+
+    fireEvent.keyDown(document, { key: 'k', ctrlKey: true, shiftKey: true })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('state')).toHaveTextContent('open')
+      expect(screen.getByTestId('mode')).toHaveTextContent('cluster')
     })
 
     fireEvent.keyDown(document, { key: 'Escape' })
 
     await waitFor(() => {
       expect(screen.getByTestId('state')).toHaveTextContent('closed')
+      expect(screen.getByTestId('mode')).toHaveTextContent('all')
     })
   })
 })
