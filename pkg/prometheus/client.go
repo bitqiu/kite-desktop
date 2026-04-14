@@ -95,13 +95,6 @@ func joinMatchers(matchers []string) string {
 	return strings.Join(matchers, ",")
 }
 
-func appendMatcher(matchers []string, key, value string) []string {
-	if value == "" {
-		return matchers
-	}
-	return append(matchers, fmt.Sprintf(`%s="%s"`, key, value))
-}
-
 func workloadMatchers(namespace, podNamePrefix, container string, withContainerLabel bool) []string {
 	matchers := []string{}
 	if withContainerLabel {
