@@ -12,6 +12,7 @@ LOCALBIN ?= $(shell pwd)/bin
 WAILS3_DEFAULT := $(or $(shell command -v wails3 2>/dev/null),$(shell find "$$HOME/.gvm/pkgsets" -path '*/bin/wails3' -type f -print -quit 2>/dev/null),wails3)
 WAILS3 ?= $(WAILS3_DEFAULT)
 GOLANGCI_LINT := $(or $(shell command -v golangci-lint 2>/dev/null),$(LOCALBIN)/golangci-lint)
+DESKTOP_DEV_PORT ?= 9245
 UI_SOURCES := $(shell find $(UI_DIR)/src -type f \( -name '*.ts' -o -name '*.tsx' -o -name '*.css' \)) \
 	$(UI_DIR)/index.html \
 	$(UI_DIR)/package.json \
@@ -60,7 +61,12 @@ static: $(UI_INSTALL_STAMP) $(UI_SOURCES) ## Build the shared web UI embedded by
 	pnpm --dir $(UI_DIR) run build
 
 dev: wails3-check static $(DESKTOP_FRONTEND_INSTALL_STAMP) ## Run the desktop app in Wails dev mode
-	cd $(DESKTOP_DIR) && $(WAILS3) dev -config ./build/config.yml
+	@PORT=$(DESKTOP_DEV_PORT); \
+	while lsof -nP -iTCP:$$PORT -sTCP:LISTEN >/dev/null 2>&1; do \
+		PORT=$$((PORT + 1)); \
+	done; \
+	echo "🚀 Starting desktop dev mode on port $$PORT"; \
+	cd $(DESKTOP_DIR) && WAILS_VITE_PORT=$$PORT $(WAILS3) dev -config ./build/config.yml -port $$PORT
 
 build: wails3-check static $(DESKTOP_FRONTEND_INSTALL_STAMP) ## Build the desktop app with Wails v3
 	cd $(DESKTOP_DIR) && $(WAILS3) build

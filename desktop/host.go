@@ -32,6 +32,7 @@ var desktopTrayIcon []byte
 var desktopMacAppIcon []byte
 
 const (
+	aiChatToggleEvent     = "kite:ai-chat-toggle"
 	pageFindOpenEvent     = "kite:page-find-open"
 	pageFindNextEvent     = "kite:page-find-next"
 	pageFindPreviousEvent = "kite:page-find-previous"
@@ -274,13 +275,17 @@ func (h *desktopHost) saveMainWindowState(maximised bool) {
 	})
 }
 
-func (h *desktopHost) emitPageFindEvent(eventName string) {
+func (h *desktopHost) emitWindowEvent(eventName string) {
 	if h == nil || h.mainWindow == nil {
 		return
 	}
 	h.mainWindow.ExecJS(
 		fmt.Sprintf("window.dispatchEvent(new Event(%s))", strconv.Quote(eventName)),
 	)
+}
+
+func (h *desktopHost) emitPageFindEvent(eventName string) {
+	h.emitWindowEvent(eventName)
 }
 
 func (h *desktopHost) persistStateOnShutdown() {
@@ -600,6 +605,13 @@ func buildApplicationMenu(h *desktopHost, devMode bool) *application.Menu {
 			return
 		}
 		h.emitPageFindEvent(pageFindPreviousEvent)
+	})
+	editMenu.AddSeparator()
+	editMenu.Add("Toggle AI Assistant").SetAccelerator("CmdOrCtrl+Shift+a").OnClick(func(ctx *application.Context) {
+		if h == nil {
+			return
+		}
+		h.emitWindowEvent(aiChatToggleEvent)
 	})
 
 	viewMenu := menu.AddSubmenu("View")
