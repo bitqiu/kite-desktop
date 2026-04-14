@@ -21,7 +21,6 @@ import ReactMarkdown from 'react-markdown'
 import { useLocation, useSearchParams } from 'react-router-dom'
 import remarkGfm from 'remark-gfm'
 
-import { useAIStatus } from '@/lib/api'
 import { openURL } from '@/lib/desktop'
 import { withSubPath } from '@/lib/subpath'
 import { ChatMessage, ChatSession, useAIChat } from '@/hooks/use-ai-chat'
@@ -45,6 +44,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { AIChatTrigger } from '@/components/ai-chat/ai-chat-trigger'
+import { getAIChatShortcutLabel } from '@/components/ai-chat/constants'
 
 const MIN_HEIGHT = 200
 const DESKTOP_DEFAULT_HEIGHT_RATIO = 0.62
@@ -805,7 +805,8 @@ export function AIChatbox({
 }: AIChatboxProps) {
   const { i18n, t } = useTranslation()
   const isMobile = useIsMobile()
-  const { isOpen, openChat, closeChat, pageContext } = useAIChatContext()
+  const { isOpen, isAvailable, openChat, closeChat, pageContext } =
+    useAIChatContext()
   const {
     messages,
     isLoading,
@@ -835,7 +836,6 @@ export function AIChatbox({
     )
   )
   const [width, setWidth] = useState(DEFAULT_WIDTH)
-  const { data: { enabled: aiEnabled } = { enabled: false } } = useAIStatus()
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const heightDragging = useRef(false)
@@ -1062,11 +1062,16 @@ export function AIChatbox({
 
   if (!shouldShowAIChatbox) return null
 
-  // Don't render if AI is not enabled
-  if (aiEnabled === false) return null
+  // Don't render if AI assistant is unavailable on the current page.
+  if (!standalone && !isAvailable) return null
 
   if (!standalone && !isOpen) {
-    return <AIChatTrigger onOpen={openChat} />
+    return (
+      <AIChatTrigger
+        onOpen={openChat}
+        shortcutLabel={getAIChatShortcutLabel()}
+      />
+    )
   }
 
   return (

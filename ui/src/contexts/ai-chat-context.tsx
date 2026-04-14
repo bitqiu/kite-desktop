@@ -3,10 +3,14 @@ import {
   ReactNode,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
 } from 'react'
 import { useLocation, useParams } from 'react-router-dom'
+
+import { useAIStatus } from '@/lib/api'
+import { AI_CHAT_TOGGLE_EVENT } from '@/components/ai-chat/constants'
 
 interface PageContext {
   page: string
@@ -17,6 +21,7 @@ interface PageContext {
 
 interface AIChatContextType {
   isOpen: boolean
+  isAvailable: boolean
   openChat: () => void
   closeChat: () => void
   toggleChat: () => void
@@ -63,18 +68,71 @@ export function AIChatProvider({ children }: { children: ReactNode }) {
   const [isOpen, setIsOpen] = useState(false)
   const location = useLocation()
   const params = useParams()
+  const { data: { enabled: aiEnabled } = { enabled: false } } = useAIStatus()
+
+  const isAvailable =
+    aiEnabled &&
+    !/^\/settings\/?$/.test(location.pathname) &&
+    location.pathname !== '/ai-chat-box'
 
   const openChat = useCallback(() => {
+    if (!isAvailable) {
+      return
+    }
     setIsOpen(true)
-  }, [])
+  }, [isAvailable])
 
   const closeChat = useCallback(() => {
     setIsOpen(false)
   }, [])
 
   const toggleChat = useCallback(() => {
+    if (!isAvailable) {
+      return
+    }
     setIsOpen((prev) => !prev)
-  }, [])
+  }, [isAvailable])
+
+  useEffect(() => {
+    if (isAvailable) {
+      return
+    }
+    setIsOpen(false)
+  }, [isAvailable])
+
+  useEffect(() => {
+    if (!isAvailable) {
+      return
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) {
+        return
+      }
+
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        event.shiftKey &&
+        !event.altKey &&
+        event.key.toLowerCase() === 'a'
+      ) {
+        event.preventDefault()
+        setIsOpen((prev) => !prev)
+      }
+    }
+
+    const handleToggle = () => {
+      setIsOpen((prev) => !prev)
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    window.addEventListener(AI_CHAT_TOGGLE_EVENT, handleToggle)
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener(AI_CHAT_TOGGLE_EVENT, handleToggle)
+    }
+  }, [isAvailable])
 
   const pageContext = useMemo<PageContext>(() => {
     const path = location.pathname
@@ -123,6 +181,7 @@ export function AIChatProvider({ children }: { children: ReactNode }) {
     <AIChatContext.Provider
       value={{
         isOpen,
+        isAvailable,
         openChat,
         closeChat,
         toggleChat,

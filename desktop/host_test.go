@@ -20,6 +20,9 @@ func TestBuildApplicationMenuIncludesEditMenu(t *testing.T) {
 	if menu.FindByLabel("Find in Page") == nil {
 		t.Fatal("expected application menu to include Find in Page shortcut")
 	}
+	if menu.FindByLabel("Toggle AI Assistant") == nil {
+		t.Fatal("expected application menu to include AI Assistant shortcut")
+	}
 	if menu.FindByRole(application.Copy) == nil {
 		t.Fatal("expected application menu to include standard clipboard shortcuts")
 	}
