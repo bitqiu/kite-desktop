@@ -91,7 +91,8 @@
     "setAsGlobalError": "Failed to update global sidebar",
     "unsetGlobal": "Unset global sidebar",
     "unsetGlobalSuccess": "Global sidebar disabled successfully",
-    "unsetGlobalError": "Failed to disable global sidebar"
+    "unsetGlobalError": "Failed to disable global sidebar",
+    "newVersionAvailable": "New version available"
   },
   "nav": {
     "overview": "Overview",

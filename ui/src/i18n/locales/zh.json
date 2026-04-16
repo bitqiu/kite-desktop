@@ -150,7 +150,8 @@
     "unsetGlobalSuccess": "已取消全局侧边栏",
     "unsetGlobalError": "取消全局侧边栏失败",
     "expand": "展开",
-    "collapse": "折叠"
+    "collapse": "折叠",
+    "newVersionAvailable": "发现新版本"
   },
   "overview": {
     "title": "概览",
