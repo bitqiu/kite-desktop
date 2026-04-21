@@ -23,6 +23,7 @@ import {
   useResource,
   useResources,
 } from '@/lib/api'
+import { trackResourceAction } from '@/lib/analytics'
 import {
   enrichNodeConditionsWithHealth,
   formatCPU,
@@ -114,9 +115,15 @@ export function NodeDetail(props: { name: string }) {
     setIsSavingYaml(true)
     try {
       await updateResource('nodes', name, undefined, content)
+      trackResourceAction('nodes', 'yaml_save', {
+        result: 'success',
+      })
       toast.success('YAML saved successfully')
     } catch (error) {
       console.error('Failed to save YAML:', error)
+      trackResourceAction('nodes', 'yaml_save', {
+        result: 'error',
+      })
       toast.error(translateError(error, t))
     } finally {
       setIsSavingYaml(false)
@@ -127,11 +134,23 @@ export function NodeDetail(props: { name: string }) {
   const handleDrain = async () => {
     try {
       await drainNode(name, drainOptions)
+      trackResourceAction('nodes', 'drain', {
+        result: 'success',
+        force: drainOptions.force,
+        delete_local_data: drainOptions.deleteLocalData,
+        ignore_daemonsets: drainOptions.ignoreDaemonsets,
+      })
       toast.success(`Node ${name} drained successfully`)
       setIsDrainPopoverOpen(false)
       handleRefresh()
     } catch (error) {
       console.error('Failed to drain node:', error)
+      trackResourceAction('nodes', 'drain', {
+        result: 'error',
+        force: drainOptions.force,
+        delete_local_data: drainOptions.deleteLocalData,
+        ignore_daemonsets: drainOptions.ignoreDaemonsets,
+      })
       toast.error(translateError(error, t))
     }
   }
@@ -139,11 +158,17 @@ export function NodeDetail(props: { name: string }) {
   const handleCordon = async () => {
     try {
       await cordonNode(name)
+      trackResourceAction('nodes', 'cordon', {
+        result: 'success',
+      })
       toast.success(`Node ${name} cordoned successfully`)
       setIsCordonPopoverOpen(false)
       handleRefresh()
     } catch (error) {
       console.error('Failed to cordon node:', error)
+      trackResourceAction('nodes', 'cordon', {
+        result: 'error',
+      })
       toast.error(translateError(error, t))
     }
   }
@@ -151,11 +176,17 @@ export function NodeDetail(props: { name: string }) {
   const handleUncordon = async () => {
     try {
       await uncordonNode(name)
+      trackResourceAction('nodes', 'uncordon', {
+        result: 'success',
+      })
       toast.success(`Node ${name} uncordoned successfully`)
       setIsCordonPopoverOpen(false)
       handleRefresh()
     } catch (error) {
       console.error('Failed to uncordon node:', error)
+      trackResourceAction('nodes', 'uncordon', {
+        result: 'error',
+      })
       toast.error(translateError(error, t))
     }
   }
@@ -168,12 +199,22 @@ export function NodeDetail(props: { name: string }) {
 
     try {
       await taintNode(name, taintData)
+      trackResourceAction('nodes', 'taint', {
+        result: 'success',
+        effect: taintData.effect,
+        has_value: Boolean(taintData.value),
+      })
       toast.success(`Node ${name} tainted successfully`)
       setIsTaintPopoverOpen(false)
       setTaintData({ key: '', value: '', effect: 'NoSchedule' })
       handleRefresh()
     } catch (error) {
       console.error('Failed to taint node:', error)
+      trackResourceAction('nodes', 'taint', {
+        result: 'error',
+        effect: taintData.effect,
+        has_value: Boolean(taintData.value),
+      })
       toast.error(translateError(error, t))
     }
   }
@@ -187,11 +228,17 @@ export function NodeDetail(props: { name: string }) {
 
     try {
       await untaintNode(name, taintKey)
+      trackResourceAction('nodes', 'untaint', {
+        result: 'success',
+      })
       toast.success(`Taint removed from node ${name} successfully`)
       if (!key) setUntaintKey('')
       handleRefresh()
     } catch (error) {
       console.error('Failed to remove taint:', error)
+      trackResourceAction('nodes', 'untaint', {
+        result: 'error',
+      })
       toast.error(translateError(error, t))
     }
   }
@@ -201,6 +248,7 @@ export function NodeDetail(props: { name: string }) {
   }
 
   const handleManualRefresh = async () => {
+    trackResourceAction('nodes', 'refresh')
     setRefreshKey((prev) => prev + 1)
     await handleRefresh()
     await refetchRelated()

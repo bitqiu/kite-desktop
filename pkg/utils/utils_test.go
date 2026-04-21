@@ -77,6 +77,7 @@ func TestInjectAnalytics(t *testing.T) {
 		`data-exclude-search="true"`,
 		`data-exclude-hash="true"`,
 		`data-do-not-track="true"`,
+		`data-performance="true"`,
 	} {
 		if !strings.Contains(got, attr) {
 			t.Fatalf("expected analytics script to contain %s: %s", attr, got)

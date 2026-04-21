@@ -13,6 +13,9 @@ const apiMocks = vi.hoisted(() => ({
   listFavoriteResources: vi.fn(),
   removeFavoriteResource: vi.fn(),
 }))
+const { trackDesktopEvent } = vi.hoisted(() => ({
+  trackDesktopEvent: vi.fn(),
+}))
 let currentClusterMock = 'cluster-a'
 
 vi.mock('@/lib/api', async () => {
@@ -30,6 +33,10 @@ vi.mock('@/hooks/use-cluster', () => ({
   useCluster: () => ({
     currentCluster: currentClusterMock,
   }),
+}))
+
+vi.mock('@/lib/analytics', () => ({
+  trackDesktopEvent,
 }))
 
 const favorite: SearchResult = {
@@ -59,6 +66,7 @@ describe('useFavorites', () => {
     favoritesStore.length = 0
     currentClusterMock = 'cluster-a'
     vi.restoreAllMocks()
+    trackDesktopEvent.mockReset()
 
     apiMocks.listFavoriteResources.mockImplementation(async () => [...favoritesStore])
     apiMocks.addFavoriteResource.mockImplementation(async (data: {
@@ -141,6 +149,10 @@ describe('useFavorites', () => {
     })
 
     expect(nextState).toBe(true)
+    expect(trackDesktopEvent).toHaveBeenCalledWith('favorite_toggle', {
+      action: 'add',
+      resource_type: 'pods',
+    })
     await waitFor(() => expect(result.current.favorites).toHaveLength(1))
 
     await act(async () => {
@@ -148,6 +160,10 @@ describe('useFavorites', () => {
     })
 
     expect(nextState).toBe(false)
+    expect(trackDesktopEvent).toHaveBeenLastCalledWith('favorite_toggle', {
+      action: 'remove',
+      resource_type: 'pods',
+    })
     await waitFor(() => expect(result.current.favorites).toEqual([]))
   })
 })

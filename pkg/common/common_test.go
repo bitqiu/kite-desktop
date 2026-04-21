@@ -193,3 +193,32 @@ func TestLoadEnvs_BaseAlreadyHasLeadingSlash(t *testing.T) {
 		t.Fatalf("Base = %q, want %q", Base, "/kite")
 	}
 }
+
+func TestLoadEnvs_AnalyticsCanBeDisabledExplicitly(t *testing.T) {
+	old := struct {
+		KiteEncryptKey     string
+		EnableAnalytics    bool
+		EnableVersionCheck bool
+		CORSAllowedOrigins []string
+	}{
+		KiteEncryptKey:     KiteEncryptKey,
+		EnableAnalytics:    EnableAnalytics,
+		EnableVersionCheck: EnableVersionCheck,
+		CORSAllowedOrigins: append([]string(nil), CORSAllowedOrigins...),
+	}
+	defer func() {
+		KiteEncryptKey = old.KiteEncryptKey
+		EnableAnalytics = old.EnableAnalytics
+		EnableVersionCheck = old.EnableVersionCheck
+		CORSAllowedOrigins = append([]string(nil), old.CORSAllowedOrigins...)
+	}()
+
+	t.Setenv("KITE_ENCRYPT_KEY", "test-encrypt-key")
+	t.Setenv("ENABLE_ANALYTICS", "false")
+
+	LoadEnvs()
+
+	if EnableAnalytics {
+		t.Fatalf("EnableAnalytics = %v, want false", EnableAnalytics)
+	}
+}

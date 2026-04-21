@@ -12,6 +12,7 @@ import { toast } from 'sonner'
 
 import { ResourceType } from '@/types/api'
 import { updateResource, useResource } from '@/lib/api'
+import { trackResourceAction } from '@/lib/analytics'
 import { getOwnerInfo } from '@/lib/k8s'
 import { withSubPath } from '@/lib/subpath'
 import { formatDate, translateError } from '@/lib/utils'
@@ -56,10 +57,16 @@ export function ServiceDetail(props: { name: string; namespace?: string }) {
     setIsSavingYaml(true)
     try {
       await updateResource('services', name, namespace, content)
+      trackResourceAction('services', 'yaml_save', {
+        result: 'success',
+      })
       toast.success(t('detail.status.yamlSaved'))
       // Refresh data after successful save
       await handleRefresh()
     } catch (error) {
+      trackResourceAction('services', 'yaml_save', {
+        result: 'error',
+      })
       toast.error(translateError(error, t))
     } finally {
       setIsSavingYaml(false)
@@ -71,6 +78,7 @@ export function ServiceDetail(props: { name: string; namespace?: string }) {
   }
 
   const handleManualRefresh = async () => {
+    trackResourceAction('services', 'refresh')
     // Increment refresh key to force YamlEditor re-render
     setRefreshKey((prev) => prev + 1)
     await handleRefresh()

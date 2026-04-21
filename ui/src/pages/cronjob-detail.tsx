@@ -18,6 +18,7 @@ import {
   useResource,
   useResources,
 } from '@/lib/api'
+import { trackResourceAction } from '@/lib/analytics'
 import { formatDate, translateError } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -215,6 +216,7 @@ export function CronJobDetail(props: { namespace: string; name: string }) {
   )
 
   const handleManualRefresh = async () => {
+    trackResourceAction('cronjobs', 'refresh')
     setRefreshKey((prev) => prev + 1)
     await Promise.all([refetchCronJob(), refetchJobs()])
   }
@@ -223,9 +225,15 @@ export function CronJobDetail(props: { namespace: string; name: string }) {
     setIsSavingYaml(true)
     try {
       await updateResource('cronjobs', name, namespace, content)
+      trackResourceAction('cronjobs', 'yaml_save', {
+        result: 'success',
+      })
       toast.success('CronJob YAML saved successfully')
       await refetchCronJob()
     } catch (error) {
+      trackResourceAction('cronjobs', 'yaml_save', {
+        result: 'error',
+      })
       toast.error(translateError(error, t))
     } finally {
       setIsSavingYaml(false)
@@ -242,16 +250,23 @@ export function CronJobDetail(props: { namespace: string; name: string }) {
       return
     }
 
+    const action = cronjob.spec?.suspend ? 'resume' : 'suspend'
     setIsTogglingSuspend(true)
     try {
       const updatedCronJob = JSON.parse(JSON.stringify(cronjob)) as CronJob
       updatedCronJob.spec!.suspend = !(cronjob.spec?.suspend ?? false)
       await updateResource('cronjobs', name, namespace, updatedCronJob)
+      trackResourceAction('cronjobs', action, {
+        result: 'success',
+      })
       toast.success(
         updatedCronJob.spec?.suspend ? 'CronJob suspended' : 'CronJob resumed'
       )
       await Promise.all([refetchCronJob(), refetchJobs()])
     } catch (error) {
+      trackResourceAction('cronjobs', action, {
+        result: 'error',
+      })
       toast.error(translateError(error, t))
     } finally {
       setIsTogglingSuspend(false)
@@ -301,9 +316,15 @@ export function CronJobDetail(props: { namespace: string; name: string }) {
       }
 
       await createResource('jobs', namespace, manualJob)
+      trackResourceAction('cronjobs', 'run_now', {
+        result: 'success',
+      })
       toast.success('Job created successfully')
       await refetchJobs()
     } catch (error) {
+      trackResourceAction('cronjobs', 'run_now', {
+        result: 'error',
+      })
       toast.error(translateError(error, t))
     } finally {
       setIsRunningNow(false)

@@ -8,6 +8,7 @@ import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { updateResource, useResource, useResources } from '@/lib/api'
+import { trackResourceAction } from '@/lib/analytics'
 import { getOwnerInfo } from '@/lib/k8s'
 import { formatDate, translateError } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -107,6 +108,7 @@ export function JobDetail(props: { namespace: string; name: string }) {
   const jobStatus = useMemo(() => getJobStatusBadge(job), [job])
 
   const handleManualRefresh = async () => {
+    trackResourceAction('jobs', 'refresh')
     setRefreshKey((prev) => prev + 1)
     await Promise.all([refetchJob(), refetchPods()])
   }
@@ -115,9 +117,15 @@ export function JobDetail(props: { namespace: string; name: string }) {
     setIsSavingYaml(true)
     try {
       await updateResource('jobs', name, namespace, content)
+      trackResourceAction('jobs', 'yaml_save', {
+        result: 'success',
+      })
       toast.success('Job YAML saved successfully')
       await refetchJob()
     } catch (error) {
+      trackResourceAction('jobs', 'yaml_save', {
+        result: 'error',
+      })
       toast.error(translateError(error, t))
     } finally {
       setIsSavingYaml(false)

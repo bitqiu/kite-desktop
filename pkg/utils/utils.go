@@ -17,7 +17,7 @@ const (
 
 func InjectAnalytics(htmlContent string) string {
 	analyticsScript := fmt.Sprintf(
-		`<script defer src="%s" data-website-id="%s" data-auto-track="false" data-tag="desktop" data-domains="127.0.0.1,localhost" data-exclude-search="true" data-exclude-hash="true" data-do-not-track="true"></script>`,
+		`<script defer src="%s" data-website-id="%s" data-auto-track="false" data-tag="desktop" data-domains="127.0.0.1,localhost" data-exclude-search="true" data-exclude-hash="true" data-do-not-track="true" data-performance="true"></script>`,
 		umamiScriptSrc,
 		umamiWebsiteID,
 	)

@@ -1,6 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { isAnalyticsEnabled, trackEvent, trackPage } from './analytics'
+import {
+  installAnalyticsErrorTracking,
+  isAnalyticsEnabled,
+  trackDesktopEvent,
+  trackEvent,
+  trackPage,
+  trackResourceAction,
+} from './analytics'
 
 describe('analytics', () => {
   beforeEach(() => {
@@ -43,9 +50,62 @@ describe('analytics', () => {
     window.__kite_analytics_enabled__ = true
     trackEvent('cluster_switch', { runtime: 'desktop' })
 
-    expect(track).toHaveBeenCalledWith({
-      name: 'cluster_switch',
-      data: { runtime: 'desktop' },
+    expect(track).toHaveBeenCalledWith('cluster_switch', {
+      runtime: 'desktop',
+    })
+  })
+
+  it('adds desktop runtime metadata for desktop events', () => {
+    const track = vi.fn()
+    window.__kite_analytics_enabled__ = true
+    window.umami = { track }
+
+    trackDesktopEvent('clipboard_copy', { transport: 'native' })
+
+    expect(track).toHaveBeenCalledWith('clipboard_copy', {
+      runtime: 'desktop',
+      page: 'overview',
+      transport: 'native',
+    })
+  })
+
+  it('tracks resource actions with sanitized resource metadata', () => {
+    const track = vi.fn()
+    window.__kite_analytics_enabled__ = true
+    window.umami = { track }
+
+    trackResourceAction('deployments', 'restart', {
+      result: 'success',
+    })
+
+    expect(track).toHaveBeenCalledWith('resource_action', {
+      runtime: 'desktop',
+      page: 'overview',
+      resource_type: 'deployments',
+      action: 'restart',
+      result: 'success',
+    })
+  })
+
+  it('tracks sanitized UI error categories when enabled', () => {
+    const track = vi.fn()
+    window.__kite_analytics_enabled__ = true
+    window.umami = { track }
+
+    const cleanup = installAnalyticsErrorTracking()
+    window.dispatchEvent(new Event('error'))
+    window.dispatchEvent(new Event('unhandledrejection'))
+    cleanup()
+
+    expect(track).toHaveBeenNthCalledWith(1, 'ui_error', {
+      runtime: 'desktop',
+      page: 'overview',
+      source: 'window_error',
+    })
+    expect(track).toHaveBeenNthCalledWith(2, 'ui_error', {
+      runtime: 'desktop',
+      page: 'overview',
+      source: 'unhandled_rejection',
     })
   })
 })

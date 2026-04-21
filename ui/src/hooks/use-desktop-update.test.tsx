@@ -8,11 +8,19 @@ const {
   checkDesktopUpdate,
   startDesktopUpdateDownload,
   applyDesktopUpdate,
+  ignoreDesktopUpdate,
+  clearIgnoredDesktopUpdate,
+  retryDesktopUpdateDownload,
+  cancelDesktopUpdateDownload,
 } = vi.hoisted(() => ({
   getDesktopUpdateState: vi.fn(),
   checkDesktopUpdate: vi.fn(),
   startDesktopUpdateDownload: vi.fn(),
   applyDesktopUpdate: vi.fn(),
+  ignoreDesktopUpdate: vi.fn(),
+  clearIgnoredDesktopUpdate: vi.fn(),
+  retryDesktopUpdateDownload: vi.fn(),
+  cancelDesktopUpdateDownload: vi.fn(),
 }))
 
 const { trackEvent } = vi.hoisted(() => ({
@@ -31,10 +39,10 @@ vi.mock('@/lib/desktop', () => ({
   checkDesktopUpdate,
   startDesktopUpdateDownload,
   applyDesktopUpdate,
-  cancelDesktopUpdateDownload: vi.fn(),
-  clearIgnoredDesktopUpdate: vi.fn(),
-  ignoreDesktopUpdate: vi.fn(),
-  retryDesktopUpdateDownload: vi.fn(),
+  cancelDesktopUpdateDownload,
+  clearIgnoredDesktopUpdate,
+  ignoreDesktopUpdate,
+  retryDesktopUpdateDownload,
 }))
 
 vi.mock('@/lib/api', () => ({
@@ -80,6 +88,10 @@ describe('useDesktopUpdate', () => {
     })
     startDesktopUpdateDownload.mockResolvedValue({ ignoredVersion: '' })
     applyDesktopUpdate.mockResolvedValue(true)
+    ignoreDesktopUpdate.mockResolvedValue(true)
+    clearIgnoredDesktopUpdate.mockResolvedValue(true)
+    retryDesktopUpdateDownload.mockResolvedValue({ ignoredVersion: '' })
+    cancelDesktopUpdateDownload.mockResolvedValue({ ignoredVersion: '' })
   })
 
   it('tracks manual update actions with sanitized metadata', async () => {
@@ -125,5 +137,41 @@ describe('useDesktopUpdate', () => {
     })
 
     expect(trackEvent).not.toHaveBeenCalled()
+  })
+
+  it('tracks update control actions beyond the initial start events', async () => {
+    const { result } = renderHook(() => useDesktopUpdate(), {
+      wrapper: createWrapper(),
+    })
+
+    await waitFor(() => {
+      expect(getDesktopUpdateState).toHaveBeenCalled()
+    })
+
+    act(() => {
+      result.current.ignore('v1.0.1')
+      result.current.clearIgnore()
+      result.current.retryDownload()
+      result.current.cancelDownload()
+    })
+
+    await waitFor(() => {
+      expect(trackEvent).toHaveBeenCalledWith('update_ignored', {
+        runtime: 'desktop',
+        page: 'overview',
+      })
+      expect(trackEvent).toHaveBeenCalledWith('update_ignore_cleared', {
+        runtime: 'desktop',
+        page: 'overview',
+      })
+      expect(trackEvent).toHaveBeenCalledWith('update_download_retried', {
+        runtime: 'desktop',
+        page: 'overview',
+      })
+      expect(trackEvent).toHaveBeenCalledWith('update_download_cancelled', {
+        runtime: 'desktop',
+        page: 'overview',
+      })
+    })
   })
 })

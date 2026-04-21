@@ -6,6 +6,10 @@ const { openSearchMock, globalSearchMock } = vi.hoisted(() => ({
   openSearchMock: vi.fn(),
   globalSearchMock: vi.fn().mockResolvedValue({ results: [] }),
 }))
+const { trackDesktopEvent, setCurrentClusterMock } = vi.hoisted(() => ({
+  trackDesktopEvent: vi.fn(),
+  setCurrentClusterMock: vi.fn(),
+}))
 const clustersMock = [
   {
     id: 1,
@@ -111,7 +115,7 @@ vi.mock('@/hooks/use-cluster', () => ({
   useCluster: () => ({
     clusters: clustersMock,
     currentCluster: 'prod',
-    setCurrentCluster: vi.fn(),
+    setCurrentCluster: setCurrentClusterMock,
     isSwitching: false,
     isLoading: false,
   }),
@@ -129,6 +133,10 @@ vi.mock('@/contexts/runtime-context', () => ({
   useRuntime: () => ({
     isDesktop: true,
   }),
+}))
+
+vi.mock('@/lib/analytics', () => ({
+  trackDesktopEvent,
 }))
 
 vi.mock('@/contexts/sidebar-config-context', () => ({
@@ -173,6 +181,8 @@ describe('GlobalSearch', () => {
   beforeEach(() => {
     openSearchMock.mockClear()
     globalSearchMock.mockClear()
+    trackDesktopEvent.mockClear()
+    setCurrentClusterMock.mockClear()
   })
 
   it('shows quick actions in all mode and can jump into cluster mode', () => {
@@ -185,7 +195,11 @@ describe('GlobalSearch', () => {
     fireEvent.click(screen.getByText('globalSearch.switchClusterMode'))
 
     expect(openSearchMock).toHaveBeenCalledWith('cluster')
-    expect(screen.queryByText('globalSearch.toggleTheme')).not.toBeInTheDocument()
+    expect(trackDesktopEvent).toHaveBeenCalledWith('global_search_select', {
+      mode: 'all',
+      item_type: 'action',
+      action_id: 'switch-cluster-mode',
+    })
   })
 
   it('shows cluster results locally in cluster mode without calling resource search', async () => {
@@ -228,5 +242,67 @@ describe('GlobalSearch', () => {
     expect(screen.queryByText('dev')).not.toBeInTheDocument()
     expect(screen.queryByText('导航')).not.toBeInTheDocument()
     expect(screen.queryByText('globalSearch.navigation')).not.toBeInTheDocument()
+  })
+
+  it('tracks resource query and selection without sending raw query text', async () => {
+    globalSearchMock.mockResolvedValueOnce({
+      results: [
+        {
+          id: 'pod-1',
+          name: 'nginx',
+          namespace: 'default',
+          resourceType: 'pods',
+        },
+      ],
+    })
+
+    render(
+      <MemoryRouter>
+        <GlobalSearch open mode="all" onOpenChange={vi.fn()} />
+      </MemoryRouter>
+    )
+
+    fireEvent.change(screen.getByPlaceholderText('globalSearch.placeholder'), {
+      target: { value: 'ng' },
+    })
+
+    await waitFor(() => {
+      expect(globalSearchMock).toHaveBeenCalledWith('ng', { limit: 10 })
+    })
+
+    await waitFor(() => {
+      expect(trackDesktopEvent).toHaveBeenCalledWith('global_search_query', {
+        mode: 'all',
+        query_length: 2,
+        result_count: 1,
+      })
+    })
+
+    fireEvent.click(screen.getByText('nginx'))
+
+    expect(trackDesktopEvent).toHaveBeenCalledWith('global_search_select', {
+      mode: 'all',
+      item_type: 'resource',
+      resource_type: 'pods',
+    })
+  })
+
+  it('tracks cluster selection in cluster mode', async () => {
+    render(
+      <MemoryRouter>
+        <GlobalSearch open mode="cluster" onOpenChange={vi.fn()} />
+      </MemoryRouter>
+    )
+
+    fireEvent.click(screen.getByText('dev'))
+
+    await waitFor(() => {
+      expect(setCurrentClusterMock).toHaveBeenCalledWith('dev')
+    })
+
+    expect(trackDesktopEvent).toHaveBeenCalledWith('global_search_select', {
+      mode: 'cluster',
+      item_type: 'cluster',
+    })
   })
 })

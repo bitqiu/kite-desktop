@@ -28,7 +28,7 @@ const (
 var (
 	Port            = "8080"
 	JwtSecret       = DefaultJWTSecret
-	EnableAnalytics = false
+	EnableAnalytics = true
 	Host            = ""
 	Base            = ""
 
@@ -64,6 +64,8 @@ func LoadEnvs() {
 	DesktopLocalMode = false
 	AnonymousUserEnabled = false
 	CORSAllowedOrigins = nil
+	EnableAnalytics = true
+	EnableVersionCheck = true
 
 	if secret := os.Getenv("JWT_SECRET"); secret != "" {
 		JwtSecret = secret
@@ -73,8 +75,8 @@ func LoadEnvs() {
 		Port = port
 	}
 
-	if analytics := os.Getenv("ENABLE_ANALYTICS"); analytics == "true" {
-		EnableAnalytics = true
+	if analytics, ok := os.LookupEnv("ENABLE_ANALYTICS"); ok {
+		EnableAnalytics = strings.EqualFold(strings.TrimSpace(analytics), "true")
 	}
 	if ns := os.Getenv("NAMESPACE"); ns != "" {
 		AgentPodNamespace = ns

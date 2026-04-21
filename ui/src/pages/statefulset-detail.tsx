@@ -14,6 +14,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { updateResource, useResource, useResourcesWatch } from '@/lib/api'
+import { trackResourceAction } from '@/lib/analytics'
 import { filterPodsOwnedByController } from '@/lib/k8s'
 import { formatDate, translateError } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -117,6 +118,7 @@ export function StatefulSetDetail(props: { namespace: string; name: string }) {
   }, [statefulset, refreshInterval, name])
 
   const handleRefresh = () => {
+    trackResourceAction('statefulsets', 'refresh')
     setRefreshKey((prev) => prev + 1)
     refetchStatefulSet()
   }
@@ -126,10 +128,16 @@ export function StatefulSetDetail(props: { namespace: string; name: string }) {
     try {
       const parsedYaml = yaml.load(yamlContent) as StatefulSet
       await updateResource('statefulsets', name, namespace, parsedYaml)
+      trackResourceAction('statefulsets', 'yaml_save', {
+        result: 'success',
+      })
       toast.success('StatefulSet YAML saved successfully')
       setRefreshInterval(1000)
     } catch (error) {
       console.error('Failed to save YAML:', error)
+      trackResourceAction('statefulsets', 'yaml_save', {
+        result: 'error',
+      })
       toast.error(translateError(error, t))
     } finally {
       setIsSavingYaml(false)
@@ -157,11 +165,19 @@ export function StatefulSetDetail(props: { namespace: string; name: string }) {
       updatedStatefulSet.spec.replicas = scaleReplicas
 
       await updateResource('statefulsets', name, namespace, updatedStatefulSet)
+      trackResourceAction('statefulsets', 'scale', {
+        result: 'success',
+        scaled_up: scaleReplicas > (statefulset.spec?.replicas || 0),
+      })
       toast.success(`StatefulSet scaled to ${scaleReplicas} replicas`)
       setIsScalePopoverOpen(false)
       setRefreshInterval(1000)
     } catch (error) {
       console.error('Failed to scale statefulset:', error)
+      trackResourceAction('statefulsets', 'scale', {
+        result: 'error',
+        scaled_up: scaleReplicas > (statefulset.spec?.replicas || 0),
+      })
       toast.error(translateError(error, t))
     }
   }
@@ -194,11 +210,17 @@ export function StatefulSetDetail(props: { namespace: string; name: string }) {
       ] = new Date().toISOString()
 
       await updateResource('statefulsets', name, namespace, updatedStatefulSet)
+      trackResourceAction('statefulsets', 'restart', {
+        result: 'success',
+      })
       toast.success('StatefulSet restart initiated')
       setIsRestartPopoverOpen(false)
       setRefreshInterval(1000)
     } catch (error) {
       console.error('Failed to restart statefulset:', error)
+      trackResourceAction('statefulsets', 'restart', {
+        result: 'error',
+      })
       toast.error(translateError(error, t))
     }
   }
@@ -235,10 +257,18 @@ export function StatefulSetDetail(props: { namespace: string; name: string }) {
         }
       }
       await updateResource('statefulsets', name, namespace, updatedStatefulSet)
+      trackResourceAction('statefulsets', 'container_update', {
+        result: 'success',
+        container_kind: init ? 'init' : 'app',
+      })
       toast.success('Container updated successfully')
       setRefreshInterval(1000)
     } catch (error) {
       console.error('Failed to update container:', error)
+      trackResourceAction('statefulsets', 'container_update', {
+        result: 'error',
+        container_kind: init ? 'init' : 'app',
+      })
       toast.error(translateError(error, t))
     }
   }

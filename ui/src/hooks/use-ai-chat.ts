@@ -11,6 +11,7 @@ import {
   listChatSessions,
   upsertChatSession,
 } from '@/lib/api/ai-history'
+import { trackDesktopEvent } from '@/lib/analytics'
 import { appendClusterNameParam } from '@/lib/cluster-transport'
 import { withSubPath } from '@/lib/subpath'
 
@@ -990,6 +991,10 @@ export function useAIChat() {
       persistActiveSessionId(currentCluster, sessionId)
       void persistSessionSnapshot(sessionId, nextMessages, pageContext)
       setIsLoading(true)
+      trackDesktopEvent('ai_chat_message_sent', {
+        session_state: currentSessionId ? 'existing' : 'new',
+        language: requestLanguage,
+      })
 
       const apiMessages = [
         ...baseMessages,

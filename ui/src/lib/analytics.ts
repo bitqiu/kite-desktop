@@ -1,4 +1,6 @@
-import { getAnalyticsPageUrl } from './analytics-route'
+import type { ResourceType } from '@/types/api'
+
+import { getAnalyticsPageUrl, getCurrentAnalyticsPageKey } from './analytics-route'
 
 type AnalyticsValue = string | number | boolean
 
@@ -12,7 +14,10 @@ type UmamiPayload = {
 type UmamiPayloadTransformer = (payload: UmamiPayload) => UmamiPayload
 
 type UmamiTracker = {
-  track: (payload?: UmamiPayload | UmamiPayloadTransformer) => void
+  track: {
+    (payload?: UmamiPayload | UmamiPayloadTransformer): void
+    (name: string, data?: Record<string, AnalyticsValue>): void
+  }
 }
 
 declare global {
@@ -68,8 +73,54 @@ export function trackEvent(
     return
   }
 
-  tracker.track({
-    name,
-    ...(data ? { data } : {}),
+  tracker.track(name, data)
+}
+
+export function trackDesktopEvent(
+  name: string,
+  data: Record<string, AnalyticsValue> = {}
+) {
+  trackEvent(name, {
+    runtime: 'desktop',
+    page: getCurrentAnalyticsPageKey(),
+    ...data,
   })
+}
+
+export function trackResourceAction(
+  resourceType: ResourceType,
+  action: string,
+  data: Record<string, AnalyticsValue> = {}
+) {
+  trackDesktopEvent('resource_action', {
+    resource_type: resourceType,
+    action,
+    ...data,
+  })
+}
+
+export function installAnalyticsErrorTracking() {
+  if (!isWindowAvailable()) {
+    return () => {}
+  }
+
+  const handleError = () => {
+    trackDesktopEvent('ui_error', {
+      source: 'window_error',
+    })
+  }
+
+  const handleUnhandledRejection = () => {
+    trackDesktopEvent('ui_error', {
+      source: 'unhandled_rejection',
+    })
+  }
+
+  window.addEventListener('error', handleError)
+  window.addEventListener('unhandledrejection', handleUnhandledRejection)
+
+  return () => {
+    window.removeEventListener('error', handleError)
+    window.removeEventListener('unhandledrejection', handleUnhandledRejection)
+  }
 }
