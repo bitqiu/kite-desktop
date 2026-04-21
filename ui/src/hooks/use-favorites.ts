@@ -8,6 +8,7 @@ import {
   removeFavoriteResource,
   SearchResult,
 } from '@/lib/api'
+import { trackDesktopEvent } from '@/lib/analytics'
 import { buildFavoriteKeyFromResource } from '@/lib/favorites'
 import { useCluster } from '@/hooks/use-cluster'
 
@@ -86,6 +87,10 @@ export function useFavorites() {
   const addToFavorites = useCallback(
     async (resource: SearchResult) => {
       await addMutation.mutateAsync(resource)
+      trackDesktopEvent('favorite_toggle', {
+        action: 'add',
+        resource_type: resource.resourceType,
+      })
     },
     [addMutation]
   )
@@ -93,6 +98,10 @@ export function useFavorites() {
   const removeFromFavorites = useCallback(
     async (resource: SearchResult) => {
       await removeMutation.mutateAsync(resource)
+      trackDesktopEvent('favorite_toggle', {
+        action: 'remove',
+        resource_type: resource.resourceType,
+      })
     },
     [removeMutation]
   )
@@ -108,10 +117,18 @@ export function useFavorites() {
     async (resource: SearchResult) => {
       if (favoriteKeys.has(buildFavoriteKeyFromResource(resource))) {
         await removeMutation.mutateAsync(resource)
+        trackDesktopEvent('favorite_toggle', {
+          action: 'remove',
+          resource_type: resource.resourceType,
+        })
         return false
       }
 
       await addMutation.mutateAsync(resource)
+      trackDesktopEvent('favorite_toggle', {
+        action: 'add',
+        resource_type: resource.resourceType,
+      })
       return true
     },
     [addMutation, favoriteKeys, removeMutation]

@@ -124,6 +124,7 @@ export function useDesktopUpdate() {
       return version.replace(/^v/, '')
     },
     onSuccess: (version) => {
+      trackDesktopUpdateEvent('update_ignored')
       queryClient.setQueryData<DesktopUpdateStateData>(
         desktopUpdateStateKey,
         (prev) => ({
@@ -145,6 +146,7 @@ export function useDesktopUpdate() {
   const clearIgnoreMutation = useMutation({
     mutationFn: clearIgnoredDesktopUpdate,
     onSuccess: () => {
+      trackDesktopUpdateEvent('update_ignore_cleared')
       queryClient.setQueryData<DesktopUpdateStateData>(
         desktopUpdateStateKey,
         (prev) => ({
@@ -168,13 +170,19 @@ export function useDesktopUpdate() {
 
   const retryDownloadMutation = useMutation({
     mutationFn: retryDesktopUpdateDownload,
-    onSuccess: refreshState,
+    onSuccess: async () => {
+      trackDesktopUpdateEvent('update_download_retried')
+      await refreshState()
+    },
     onError: showMutationError,
   })
 
   const cancelDownloadMutation = useMutation({
     mutationFn: cancelDesktopUpdateDownload,
-    onSuccess: refreshState,
+    onSuccess: async () => {
+      trackDesktopUpdateEvent('update_download_cancelled')
+      await refreshState()
+    },
     onError: showMutationError,
   })
 

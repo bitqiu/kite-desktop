@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { updateResource, useResource, useResourcesWatch } from '@/lib/api'
+import { trackResourceAction } from '@/lib/analytics'
 import { filterPodsOwnedByController } from '@/lib/k8s'
 import { formatDate, translateError } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -87,6 +88,7 @@ export function DaemonSetDetail(props: { namespace: string; name: string }) {
   }, [daemonset, refreshInterval])
 
   const handleRefresh = () => {
+    trackResourceAction('daemonsets', 'refresh')
     setRefreshKey((prev) => prev + 1)
     refetchDaemonSet()
   }
@@ -116,11 +118,17 @@ export function DaemonSetDetail(props: { namespace: string; name: string }) {
     try {
       const parsedYaml = yaml.load(yamlContent) as DaemonSet
       await updateResource('daemonsets', name, namespace, parsedYaml)
+      trackResourceAction('daemonsets', 'yaml_save', {
+        result: 'success',
+      })
       toast.success('DaemonSet YAML saved successfully')
       setRefreshInterval(1000) // Set a short refresh interval to see changes
       await refetchDaemonSet()
     } catch (error) {
       console.error('Failed to save YAML:', error)
+      trackResourceAction('daemonsets', 'yaml_save', {
+        result: 'error',
+      })
       toast.error(translateError(error, t))
     } finally {
       setIsSavingYaml(false)
@@ -151,11 +159,17 @@ export function DaemonSetDetail(props: { namespace: string; name: string }) {
       ] = new Date().toISOString()
 
       await updateResource('daemonsets', name, namespace, updatedDaemonSet)
+      trackResourceAction('daemonsets', 'restart', {
+        result: 'success',
+      })
       toast.success('DaemonSet restart initiated')
       setIsRestartPopoverOpen(false)
       setRefreshInterval(1000)
     } catch (error) {
       console.error('Failed to restart daemonset:', error)
+      trackResourceAction('daemonsets', 'restart', {
+        result: 'error',
+      })
       toast.error(translateError(error, t))
     }
   }
@@ -195,10 +209,18 @@ export function DaemonSetDetail(props: { namespace: string; name: string }) {
       }
 
       await updateResource('daemonsets', name, namespace, updatedDaemonSet)
+      trackResourceAction('daemonsets', 'container_update', {
+        result: 'success',
+        container_kind: init ? 'init' : 'app',
+      })
       toast.success('Container updated successfully')
       setRefreshInterval(1000) // Set a short refresh interval to see changes
     } catch (error) {
       console.error('Failed to update container:', error)
+      trackResourceAction('daemonsets', 'container_update', {
+        result: 'error',
+        container_kind: init ? 'init' : 'app',
+      })
       toast.error(translateError(error, t))
     }
   }

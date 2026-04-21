@@ -177,6 +177,32 @@ const DEFAULT_CAPABILITIES: DesktopCapabilities = {
 let desktopModePromise: Promise<boolean> | null = null
 let desktopStatusPromise: Promise<DesktopStatus> | null = null
 
+function trackDesktopAction(
+  name: string,
+  data: Record<string, string | number | boolean> = {}
+) {
+  trackEvent(name, {
+    runtime: 'desktop',
+    page: getCurrentAnalyticsPageKey(),
+    ...data,
+  })
+}
+
+function classifyTrackedUrl(url: string) {
+  if (typeof window === 'undefined') {
+    return 'unknown'
+  }
+
+  try {
+    const resolved = new URL(url, window.location.href)
+    return resolved.origin === window.location.origin
+      ? 'same_origin'
+      : 'external'
+  } catch {
+    return 'invalid'
+  }
+}
+
 export function getDesktopStatus(): Promise<DesktopStatus> {
   if (!desktopStatusPromise) {
     desktopStatusPromise = fetchDesktopStatus()
@@ -197,11 +223,17 @@ export async function openURL(
   url: string,
   options: DesktopWindowOptions = {}
 ): Promise<void> {
+  const target = classifyTrackedUrl(url)
+  const desktopMode = await isDesktopMode()
   try {
-    if (await isDesktopMode()) {
+    if (desktopMode) {
       await postDesktop('/api/desktop/open-url', {
         url,
         ...options,
+      })
+      trackDesktopAction('desktop_link_open', {
+        target,
+        transport: 'desktop_host',
       })
       return
     }
@@ -210,6 +242,12 @@ export async function openURL(
   }
 
   window.open(url, '_blank', 'noopener,noreferrer')
+  if (desktopMode) {
+    trackDesktopAction('desktop_link_open', {
+      target,
+      transport: 'browser',
+    })
+  }
 }
 
 export async function openAIChatSidecar(
@@ -251,10 +289,15 @@ export async function openNativeFile(
     return null
   }
 
-  return postDesktop<NativeFileSelection>('/api/desktop/open-file', {
+  const result = await postDesktop<NativeFileSelection>('/api/desktop/open-file', {
     readContent: true,
     ...options,
   })
+  trackDesktopAction('desktop_file_open', {
+    mode: options.readContent === false ? 'select' : 'read_content',
+    result: result.canceled ? 'canceled' : 'selected',
+  })
+  return result
 }
 
 export async function saveNativeFile(
@@ -264,18 +307,33 @@ export async function saveNativeFile(
     return null
   }
 
-  return postDesktop<NativeSaveFileResult>('/api/desktop/save-file', options)
+  const result = await postDesktop<NativeSaveFileResult>(
+    '/api/desktop/save-file',
+    options
+  )
+  trackDesktopAction('desktop_file_save', {
+    mode: 'native',
+    result: result.canceled ? 'canceled' : 'saved',
+  })
+  return result
 }
 
 export async function saveTextFile(
   options: NativeSaveFileOptions
 ): Promise<NativeSaveFileResult> {
+  const desktopMode = await isDesktopMode()
   const nativeResult = await saveNativeFile(options)
   if (nativeResult) {
     return nativeResult
   }
 
   browserDownload(options.content, options.suggestedName || 'download.txt')
+  if (desktopMode) {
+    trackDesktopAction('desktop_file_save', {
+      mode: 'browser_fallback',
+      result: 'saved',
+    })
+  }
   return { canceled: false }
 }
 
@@ -286,47 +344,103 @@ export async function downloadNativeFile(
     return null
   }
 
-  return postDesktop<NativeDownloadFileResult>(
+  const result = await postDesktop<NativeDownloadFileResult>(
     '/api/desktop/download-to-path',
     options
   )
+  trackDesktopAction('desktop_file_download', {
+    result: result.canceled ? 'canceled' : 'saved',
+  })
+  return result
 }
 
 export async function openPath(path: string): Promise<boolean> {
-  return invokeDesktopAction('/api/desktop/open-path', { path })
+  const opened = await invokeDesktopAction('/api/desktop/open-path', { path })
+  if (opened) {
+    trackDesktopAction('desktop_path_action', {
+      action: 'open_path',
+    })
+  }
+  return opened
 }
 
 export async function revealPath(path: string): Promise<boolean> {
-  return invokeDesktopAction('/api/desktop/reveal-path', { path })
+  const revealed = await invokeDesktopAction('/api/desktop/reveal-path', { path })
+  if (revealed) {
+    trackDesktopAction('desktop_path_action', {
+      action: 'reveal_path',
+    })
+  }
+  return revealed
 }
 
 export async function openLogsDir(): Promise<boolean> {
-  return invokeDesktopAction('/api/desktop/open-logs-dir')
+  const opened = await invokeDesktopAction('/api/desktop/open-logs-dir')
+  if (opened) {
+    trackDesktopAction('desktop_path_action', {
+      action: 'open_logs_dir',
+    })
+  }
+  return opened
 }
 
 export async function openConfigDir(): Promise<boolean> {
-  return invokeDesktopAction('/api/desktop/open-config-dir')
+  const opened = await invokeDesktopAction('/api/desktop/open-config-dir')
+  if (opened) {
+    trackDesktopAction('desktop_path_action', {
+      action: 'open_config_dir',
+    })
+  }
+  return opened
 }
 
 export async function focusDesktopApp(): Promise<boolean> {
-  return invokeDesktopAction('/api/desktop/window/focus')
+  const focused = await invokeDesktopAction('/api/desktop/window/focus')
+  if (focused) {
+    trackDesktopAction('desktop_window_action', {
+      action: 'focus',
+    })
+  }
+  return focused
 }
 
 export async function hideDesktopApp(): Promise<boolean> {
-  return invokeDesktopAction('/api/desktop/window/hide')
+  const hidden = await invokeDesktopAction('/api/desktop/window/hide')
+  if (hidden) {
+    trackDesktopAction('desktop_window_action', {
+      action: 'hide',
+    })
+  }
+  return hidden
 }
 
 export async function quitDesktopApp(): Promise<boolean> {
-  return invokeDesktopAction('/api/desktop/window/quit')
+  const quit = await invokeDesktopAction('/api/desktop/window/quit')
+  if (quit) {
+    trackDesktopAction('desktop_window_action', {
+      action: 'quit',
+    })
+  }
+  return quit
 }
 
 export async function copyTextToClipboard(text: string): Promise<void> {
-  if (await invokeDesktopAction('/api/desktop/copy-to-clipboard', { text })) {
+  const desktopMode = await isDesktopMode()
+
+  if (desktopMode && (await invokeDesktopAction('/api/desktop/copy-to-clipboard', { text }))) {
+    trackDesktopAction('clipboard_copy', {
+      transport: 'native',
+    })
     return
   }
 
   if (navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(text)
+    if (desktopMode) {
+      trackDesktopAction('clipboard_copy', {
+        transport: 'clipboard_api',
+      })
+    }
     return
   }
 
@@ -339,6 +453,11 @@ export async function copyTextToClipboard(text: string): Promise<void> {
   textarea.select()
   document.execCommand('copy')
   document.body.removeChild(textarea)
+  if (desktopMode) {
+    trackDesktopAction('clipboard_copy', {
+      transport: 'exec_command',
+    })
+  }
 }
 
 export async function importKubeconfig(content?: string): Promise<boolean> {

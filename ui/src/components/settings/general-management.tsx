@@ -80,7 +80,7 @@ export function GeneralManagement() {
     kubectlEnabled: true,
     kubectlImage: DEFAULT_KUBECTL_IMAGE,
     nodeTerminalImage: DEFAULT_NODE_TERMINAL_IMAGE,
-    enableAnalytics: false,
+    enableAnalytics: true,
     enableVersionCheck: true,
   })
 
@@ -99,7 +99,7 @@ export function GeneralManagement() {
       kubectlEnabled: data.kubectlEnabled ?? true,
       kubectlImage: data.kubectlImage || DEFAULT_KUBECTL_IMAGE,
       nodeTerminalImage: data.nodeTerminalImage || DEFAULT_NODE_TERMINAL_IMAGE,
-      enableAnalytics: data.enableAnalytics ?? false,
+      enableAnalytics: data.enableAnalytics ?? true,
       enableVersionCheck: data.enableVersionCheck ?? true,
     })
   }, [data])
@@ -524,7 +524,7 @@ export function GeneralManagement() {
             <p className="mt-1 text-xs text-muted-foreground">
               {t(
                 'generalManagement.runtime.description',
-                'Configure usage analytics and version checking. Turning off analytics does not disable version checks.'
+                'Configure usage analytics and version checking. Analytics is enabled by default, and turning it off does not disable version checks.'
               )}
             </p>
           </div>

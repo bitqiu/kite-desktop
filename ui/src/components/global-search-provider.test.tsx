@@ -1,6 +1,14 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
+const { trackDesktopEvent } = vi.hoisted(() => ({
+  trackDesktopEvent: vi.fn(),
+}))
+
+vi.mock('@/lib/analytics', () => ({
+  trackDesktopEvent,
+}))
+
 import { GlobalSearchProvider, useGlobalSearch } from './global-search-provider'
 
 function createStorage() {
@@ -49,6 +57,7 @@ function GlobalSearchConsumer() {
 
 describe('GlobalSearchProvider', () => {
   it('opens global search from the keyboard and closes on escape', async () => {
+    trackDesktopEvent.mockReset()
     render(
       <GlobalSearchProvider>
         <GlobalSearchConsumer />
@@ -64,12 +73,20 @@ describe('GlobalSearchProvider', () => {
       expect(screen.getByTestId('state')).toHaveTextContent('open')
       expect(screen.getByTestId('mode')).toHaveTextContent('all')
     })
+    expect(trackDesktopEvent).toHaveBeenNthCalledWith(1, 'global_search_open', {
+      mode: 'all',
+      entry: 'shortcut',
+    })
 
     fireEvent.keyDown(document, { key: 'k', ctrlKey: true, shiftKey: true })
 
     await waitFor(() => {
       expect(screen.getByTestId('state')).toHaveTextContent('open')
       expect(screen.getByTestId('mode')).toHaveTextContent('cluster')
+    })
+    expect(trackDesktopEvent).toHaveBeenNthCalledWith(2, 'global_search_open', {
+      mode: 'cluster',
+      entry: 'shortcut',
     })
 
     fireEvent.keyDown(document, { key: 'Escape' })

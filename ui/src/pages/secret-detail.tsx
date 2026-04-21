@@ -7,6 +7,7 @@ import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { updateResource, useResource } from '@/lib/api'
+import { trackResourceAction } from '@/lib/analytics'
 import { getOwnerInfo } from '@/lib/k8s'
 import { formatDate, translateError } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -52,9 +53,15 @@ export function SecretDetail(props: { namespace: string; name: string }) {
     setIsSavingYaml(true)
     try {
       await updateResource('secrets', name, namespace, content)
+      trackResourceAction('secrets', 'yaml_save', {
+        result: 'success',
+      })
       toast.success(t('detail.status.yamlSaved'))
       await handleRefresh()
     } catch (error) {
+      trackResourceAction('secrets', 'yaml_save', {
+        result: 'error',
+      })
       toast.error(translateError(error, t))
     } finally {
       setIsSavingYaml(false)
@@ -66,6 +73,7 @@ export function SecretDetail(props: { namespace: string; name: string }) {
   }
 
   const handleManualRefresh = async () => {
+    trackResourceAction('secrets', 'refresh')
     setRefreshKey((prev) => prev + 1)
     await handleRefresh()
   }

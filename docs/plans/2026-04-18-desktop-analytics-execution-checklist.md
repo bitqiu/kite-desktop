@@ -20,7 +20,7 @@
   - [ ] 只保留少量关键事件
   - [ ] analytics 与 version check 独立开关
 - [ ] 认可默认策略：
-  - [ ] analytics 默认关闭
+  - [ ] analytics 默认开启
   - [ ] version check 默认开启
 - [ ] 认可以下字段禁止进入 analytics：
   - [ ] cluster name

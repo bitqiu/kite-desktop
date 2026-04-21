@@ -16,6 +16,7 @@ import {
   updateCluster,
   useClusterList,
 } from '@/lib/api'
+import { trackDesktopEvent } from '@/lib/analytics'
 import { invalidateClusterQueries } from '@/lib/cluster-query'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -29,6 +30,17 @@ import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialo
 
 import { Action, ActionTable } from '../action-table'
 import { ClusterDialog } from './cluster-dialog'
+
+function getClusterAnalyticsPayload(
+  clusterData: ClusterCreateRequest | ClusterUpdateRequest
+) {
+  return {
+    cluster_type: clusterData.inCluster ? 'in_cluster' : 'external',
+    has_prometheus: Boolean(clusterData.prometheusURL?.trim()),
+    is_default: Boolean(clusterData.isDefault),
+    enabled: !('enabled' in clusterData) || clusterData.enabled !== false,
+  }
+}
 
 export function ClusterManagement() {
   const { t } = useTranslation()
@@ -187,14 +199,24 @@ export function ClusterManagement() {
 
   const createMutation = useMutation({
     mutationFn: createCluster,
-    onSuccess: async () => {
+    onSuccess: async (_result, variables) => {
       await invalidateClusterQueries(queryClient)
+      trackDesktopEvent('cluster_management_save', {
+        action: 'create',
+        result: 'success',
+        ...getClusterAnalyticsPayload(variables),
+      })
       toast.success(
         t('clusterManagement.messages.created', 'Cluster created successfully')
       )
       setShowClusterDialog(false)
     },
-    onError: (error: Error) => {
+    onError: (error: Error, variables) => {
+      trackDesktopEvent('cluster_management_save', {
+        action: 'create',
+        result: 'error',
+        ...getClusterAnalyticsPayload(variables),
+      })
       toast.error(
         error.message ||
           t(
@@ -209,15 +231,25 @@ export function ClusterManagement() {
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: ClusterUpdateRequest }) =>
       updateCluster(id, data),
-    onSuccess: async () => {
+    onSuccess: async (_result, variables) => {
       await invalidateClusterQueries(queryClient)
+      trackDesktopEvent('cluster_management_save', {
+        action: 'update',
+        result: 'success',
+        ...getClusterAnalyticsPayload(variables.data),
+      })
       toast.success(
         t('clusterManagement.messages.updated', 'Cluster updated successfully')
       )
       setShowClusterDialog(false)
       setEditingCluster(null)
     },
-    onError: (error: Error) => {
+    onError: (error: Error, variables) => {
+      trackDesktopEvent('cluster_management_save', {
+        action: 'update',
+        result: 'error',
+        ...getClusterAnalyticsPayload(variables.data),
+      })
       toast.error(
         error.message ||
           t(
@@ -233,12 +265,18 @@ export function ClusterManagement() {
     mutationFn: deleteCluster,
     onSuccess: async () => {
       await invalidateClusterQueries(queryClient)
+      trackDesktopEvent('cluster_management_delete', {
+        result: 'success',
+      })
       toast.success(
         t('clusterManagement.messages.deleted', 'Cluster deleted successfully')
       )
       setDeletingCluster(null)
     },
     onError: (error: Error) => {
+      trackDesktopEvent('cluster_management_delete', {
+        result: 'error',
+      })
       toast.error(
         error.message ||
           t(
@@ -265,7 +303,20 @@ export function ClusterManagement() {
   const handleTestClusterConnection = async (
     clusterData: ClusterCreateRequest
   ): Promise<ClusterConnectionTestResponse> => {
-    return await testClusterConnection(clusterData)
+    try {
+      const result = await testClusterConnection(clusterData)
+      trackDesktopEvent('cluster_management_test_connection', {
+        result: 'success',
+        ...getClusterAnalyticsPayload(clusterData),
+      })
+      return result
+    } catch (error) {
+      trackDesktopEvent('cluster_management_test_connection', {
+        result: 'error',
+        ...getClusterAnalyticsPayload(clusterData),
+      })
+      throw error
+    }
   }
 
   const handleDeleteCluster = () => {

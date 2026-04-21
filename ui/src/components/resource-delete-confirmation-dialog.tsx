@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { ResourceType } from '@/types/api'
 import { deleteResource } from '@/lib/api'
+import { trackResourceAction } from '@/lib/analytics'
 import { translateError } from '@/lib/utils'
 
 import { DeleteConfirmationDialog } from './delete-confirmation-dialog'
@@ -34,12 +35,25 @@ export function ResourceDeleteConfirmationDialog({
   const navigate = useNavigate()
   const { t } = useTranslation()
 
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+
+    trackResourceAction(resourceType, 'delete_open')
+  }, [open, resourceType])
+
   const handleDelete = async (force?: boolean, wait?: boolean) => {
     setIsDeleting(true)
     try {
       await deleteResource(resourceType, resourceName, namespace, {
         force,
         wait,
+      })
+      trackResourceAction(resourceType, 'delete', {
+        result: 'success',
+        force: Boolean(force),
+        wait: Boolean(wait),
       })
       toast.success(
         t('detail.status.deleted', {
@@ -48,6 +62,11 @@ export function ResourceDeleteConfirmationDialog({
       )
       navigate(`/${resourceType}`)
     } catch (error) {
+      trackResourceAction(resourceType, 'delete', {
+        result: 'error',
+        force: Boolean(force),
+        wait: Boolean(wait),
+      })
       toast.error(translateError(error, t))
     } finally {
       setIsDeleting(false)

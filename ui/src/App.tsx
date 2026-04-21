@@ -22,7 +22,7 @@ import { NavigationProvider } from './contexts/navigation-context'
 import { TerminalProvider, useTerminal } from './contexts/terminal-context'
 import { useCluster } from './hooks/use-cluster'
 import { apiClient } from './lib/api-client'
-import { trackPage } from './lib/analytics'
+import { installAnalyticsErrorTracking, trackPage } from './lib/analytics'
 import { getAnalyticsPageKey } from './lib/analytics-route'
 import { prefetchMonaco } from './lib/monaco-runtime'
 
@@ -116,6 +116,10 @@ function AnalyticsBridge() {
 function AppProviders({ children }: { children: ReactNode }) {
   useEffect(() => {
     prefetchMonaco()
+  }, [])
+
+  useEffect(() => {
+    return installAnalyticsErrorTracking()
   }, [])
 
   return (

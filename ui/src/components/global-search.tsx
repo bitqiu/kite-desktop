@@ -30,6 +30,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 
 import { globalSearch, SearchResult } from '@/lib/api'
+import { trackDesktopEvent } from '@/lib/analytics'
 import { useCluster } from '@/hooks/use-cluster'
 import { useFavorites } from '@/hooks/use-favorites'
 import { Cluster } from '@/types/api'
@@ -467,13 +468,24 @@ export function GlobalSearch({ open, mode, onOpenChange }: GlobalSearchProps) {
       setIsLoading(true)
       const response = await globalSearch(searchQuery, { limit: 10 })
       setResults(response.results)
+      trackDesktopEvent('global_search_query', {
+        mode,
+        query_length: searchQuery.trim().length,
+        result_count: response.results.length,
+      })
     } catch (error) {
       console.error('Search failed:', error)
       setResults([])
+      trackDesktopEvent('global_search_query', {
+        mode,
+        query_length: searchQuery.trim().length,
+        result_count: 0,
+        result: 'error',
+      })
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [mode])
 
   // Debounce search calls
   useEffect(() => {
@@ -502,12 +514,21 @@ export function GlobalSearch({ open, mode, onOpenChange }: GlobalSearchProps) {
 
   // Handle item selection
   const handleSelect = useCallback(
-    (path: string) => {
+    (
+      path: string,
+      itemType: 'navigation' | 'resource' | 'action' | 'cluster',
+      data: Record<string, string | number | boolean> = {}
+    ) => {
+      trackDesktopEvent('global_search_select', {
+        mode,
+        item_type: itemType,
+        ...data,
+      })
       navigate(path)
       onOpenChange(false)
       setQuery('')
     },
-    [navigate, onOpenChange]
+    [mode, navigate, onOpenChange]
   )
 
   // Clear state when dialog closes
@@ -555,6 +576,10 @@ export function GlobalSearch({ open, mode, onOpenChange }: GlobalSearchProps) {
       ) {
         return
       }
+      trackDesktopEvent('global_search_select', {
+        mode,
+        item_type: 'cluster',
+      })
       setCurrentCluster(clusterName)
       onOpenChange(false)
       setQuery('')
@@ -563,6 +588,7 @@ export function GlobalSearch({ open, mode, onOpenChange }: GlobalSearchProps) {
       currentCluster,
       isClusterLoading,
       isSwitching,
+      mode,
       onOpenChange,
       setCurrentCluster,
     ]
@@ -605,7 +631,11 @@ export function GlobalSearch({ open, mode, onOpenChange }: GlobalSearchProps) {
                     <CommandItem
                       key={`nav-${item.id}`}
                       value={`${item.title} ${item.groupLabel || ''} ${item.url}`}
-                      onSelect={() => handleSelect(item.url)}
+                      onSelect={() =>
+                        handleSelect(item.url, 'navigation', {
+                          entry_id: item.id,
+                        })
+                      }
                       className="flex items-center gap-3 py-3"
                     >
                       <Icon className="h-4 w-4 text-sidebar-primary" />
@@ -640,6 +670,11 @@ export function GlobalSearch({ open, mode, onOpenChange }: GlobalSearchProps) {
                     key={actionOption.id}
                     value={`${actionOption.label} theme toggle mode`}
                     onSelect={() => {
+                      trackDesktopEvent('global_search_select', {
+                        mode,
+                        item_type: 'action',
+                        action_id: actionOption.id,
+                      })
                       actionOption.onSelect()
                       if (actionOption.closeOnSelect !== false) {
                         onOpenChange(false)
@@ -738,7 +773,11 @@ export function GlobalSearch({ open, mode, onOpenChange }: GlobalSearchProps) {
                         RESOURCE_CONFIG[result.resourceType]?.label ||
                         result.resourceType
                       }`}
-                      onSelect={() => handleSelect(path)}
+                      onSelect={() =>
+                        handleSelect(path, 'resource', {
+                          resource_type: result.resourceType,
+                        })
+                      }
                       className="flex items-center gap-3 py-3"
                     >
                       <Icon className="h-4 w-4 text-sidebar-primary" />

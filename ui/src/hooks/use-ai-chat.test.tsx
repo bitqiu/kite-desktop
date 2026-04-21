@@ -16,12 +16,19 @@ const {
   upsertChatSession: vi.fn(),
   deleteChatSession: vi.fn(),
 }))
+const { trackDesktopEvent } = vi.hoisted(() => ({
+  trackDesktopEvent: vi.fn(),
+}))
 
 vi.mock('@/lib/api/ai-history', () => ({
   listChatSessions,
   getChatSession,
   upsertChatSession,
   deleteChatSession,
+}))
+
+vi.mock('@/lib/analytics', () => ({
+  trackDesktopEvent,
 }))
 
 describe('useAIChat', () => {
@@ -238,6 +245,10 @@ describe('useAIChat', () => {
       content: 'Check rollout status',
     })
     expect(localStorage.getItem('ai-chat-active-session-cluster-a')).toBeTruthy()
+    expect(trackDesktopEvent).toHaveBeenCalledWith('ai_chat_message_sent', {
+      session_state: 'new',
+      language: 'en',
+    })
   })
 
   it('restores the last active session from storage after history loads', async () => {

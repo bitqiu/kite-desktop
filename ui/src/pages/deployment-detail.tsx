@@ -18,6 +18,7 @@ import {
   useResources,
   useResourcesWatch,
 } from '@/lib/api'
+import { trackResourceAction } from '@/lib/analytics'
 import {
   buildDeploymentOverviewViewModel,
   filterPodsOwnedByDeployment,
@@ -138,6 +139,7 @@ export function DeploymentDetail(props: { namespace: string; name: string }) {
   }, [deployment, refreshInterval])
 
   const handleRefresh = () => {
+    trackResourceAction('deployments', 'refresh')
     setRefreshKey((prev) => prev + 1)
     refetchDeployment()
   }
@@ -155,11 +157,17 @@ export function DeploymentDetail(props: { namespace: string; name: string }) {
         'kite.kubernetes.io/restartedAt'
       ] = new Date().toISOString()
       await updateResource('deployments', name, namespace, updatedDeployment)
+      trackResourceAction('deployments', 'restart', {
+        result: 'success',
+      })
       toast.success('Deployment restart initiated')
       setIsRestartPopoverOpen(false)
       setRefreshInterval(1000)
     } catch (error) {
       console.error('Failed to restart deployment:', error)
+      trackResourceAction('deployments', 'restart', {
+        result: 'error',
+      })
       toast.error(translateError(error, t))
     }
   }, [t, deployment, name, namespace])
@@ -174,11 +182,19 @@ export function DeploymentDetail(props: { namespace: string; name: string }) {
         },
       }
       await patchResource('deployments', name, namespace, updatedDeployment)
+      trackResourceAction('deployments', 'scale', {
+        result: 'success',
+        scaled_up: scaleReplicas > (deployment.spec?.replicas || 0),
+      })
       toast.success(`Deployment scaled to ${scaleReplicas} replicas`)
       setIsScalePopoverOpen(false)
       setRefreshInterval(1000)
     } catch (error) {
       console.error('Failed to restart deployment:', error)
+      trackResourceAction('deployments', 'scale', {
+        result: 'error',
+        scaled_up: scaleReplicas > (deployment.spec?.replicas || 0),
+      })
       toast.error(translateError(error, t))
     }
   }, [t, deployment, name, namespace, scaleReplicas])
@@ -187,10 +203,16 @@ export function DeploymentDetail(props: { namespace: string; name: string }) {
     setIsSavingYaml(true)
     try {
       await updateResource('deployments', name, namespace, content)
+      trackResourceAction('deployments', 'yaml_save', {
+        result: 'success',
+      })
       toast.success('YAML saved successfully')
       setRefreshInterval(1000)
     } catch (error) {
       console.error('Failed to save YAML:', error)
+      trackResourceAction('deployments', 'yaml_save', {
+        result: 'error',
+      })
       toast.error(translateError(error, t))
     } finally {
       setIsSavingYaml(false)
@@ -208,6 +230,9 @@ export function DeploymentDetail(props: { namespace: string; name: string }) {
         deployment?.spec?.template?.spec?.containers?.[0]?.name ||
         undefined
 
+      trackResourceAction('deployments', 'container_edit_open', {
+        has_explicit_target: Boolean(containerName),
+      })
       setSelectedContainerName(nextContainerName)
       setIsContainerEditorOpen(true)
     },
@@ -255,10 +280,18 @@ export function DeploymentDetail(props: { namespace: string; name: string }) {
 
       // Call the update API
       await updateResource('deployments', name, namespace, updatedDeployment)
+      trackResourceAction('deployments', 'container_update', {
+        result: 'success',
+        container_kind: init ? 'init' : 'app',
+      })
       toast.success(`Container ${updatedContainer.name} updated successfully`)
       setRefreshInterval(1000)
     } catch (error) {
       console.error('Failed to update container:', error)
+      trackResourceAction('deployments', 'container_update', {
+        result: 'error',
+        container_kind: init ? 'init' : 'app',
+      })
       toast.error(translateError(error, t))
     }
   }
@@ -267,10 +300,18 @@ export function DeploymentDetail(props: { namespace: string; name: string }) {
     async (updatedDeployment: Deployment) => {
       try {
         await updateResource('deployments', name, namespace, updatedDeployment)
+        trackResourceAction('deployments', 'container_update', {
+          result: 'success',
+          container_kind: 'app',
+        })
         toast.success(t('containerEditor.saveSuccess'))
         setRefreshInterval(1000)
       } catch (error) {
         console.error('Failed to update deployment:', error)
+        trackResourceAction('deployments', 'container_update', {
+          result: 'error',
+          container_kind: 'app',
+        })
         toast.error(translateError(error, t))
         throw error
       }

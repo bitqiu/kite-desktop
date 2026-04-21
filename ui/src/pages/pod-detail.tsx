@@ -12,6 +12,7 @@ import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { resizePod, updateResource, useResource } from '@/lib/api'
+import { trackResourceAction } from '@/lib/analytics'
 import { getOwnerInfo, getPodErrorMessage, getPodStatus } from '@/lib/k8s'
 import { withSubPath } from '@/lib/subpath'
 import { formatDate, translateError, translatePodStatus } from '@/lib/utils'
@@ -102,10 +103,16 @@ export function PodDetail(props: { namespace: string; name: string }) {
     setIsSavingYaml(true)
     try {
       await updateResource('pods', name, namespace, content)
+      trackResourceAction('pods', 'yaml_save', {
+        result: 'success',
+      })
       toast.success(t('detail.status.yamlSaved'))
       // Refresh data after successful save
       await handleRefresh()
     } catch (error) {
+      trackResourceAction('pods', 'yaml_save', {
+        result: 'error',
+      })
       toast.error(translateError(error, t))
     } finally {
       setIsSavingYaml(false)
@@ -128,10 +135,16 @@ export function PodDetail(props: { namespace: string; name: string }) {
           ],
         },
       })
+      trackResourceAction('pods', 'resize_resources', {
+        result: 'success',
+      })
       toast.success(t('pods.resizeResourcesSuccess'))
       await handleRefresh()
       setIsResizeDialogOpen(false)
     } catch (error) {
+      trackResourceAction('pods', 'resize_resources', {
+        result: 'error',
+      })
       toast.error(translateError(error, t))
     } finally {
       setIsResizing(false)
@@ -143,6 +156,7 @@ export function PodDetail(props: { namespace: string; name: string }) {
   }
 
   const handleManualRefresh = async () => {
+    trackResourceAction('pods', 'refresh')
     // Increment refresh key to force YamlEditor re-render
     setRefreshKey((prev) => prev + 1)
     await handleRefresh()
