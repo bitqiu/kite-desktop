@@ -323,6 +323,10 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
+            const {
+              dedupeChangeEntries,
+              stripManagedSections,
+            } = require(`${process.env.GITHUB_WORKSPACE}/.github/scripts/release-notes.cjs`);
             const [owner, repo] = process.env.GITHUB_REPOSITORY.split("/");
             const tagName = process.env.TAG_NAME;
             const fallbackBody = process.env.FALLBACK_BODY || "";
@@ -337,37 +341,12 @@ jobs:
             const existingRelease = releases.find((release) => release.tag_name === tagName);
             const preservedBody = existingRelease?.body?.trim() ? existingRelease.body : fallbackBody;
 
-            const stripManagedSections = (body) => {
-              const lines = (body || "").split(/\r?\n/);
-              const kept = [];
-              let skippingManagedSection = false;
-
-              for (const line of lines) {
-                const trimmed = line.trim();
-
-                if (/^## (Downloads|Checksums)$/.test(trimmed)) {
-                  skippingManagedSection = true;
-                  continue;
-                }
-
-                if (skippingManagedSection && /^##\s+/.test(trimmed)) {
-                  skippingManagedSection = false;
-                }
-
-                if (!skippingManagedSection) {
-                  kept.push(line);
-                }
-              }
-
-              return kept.join("\n").trim();
-            };
-
             const mergedBody = [releaseHeader, stripManagedSections(preservedBody)]
               .filter(Boolean)
               .join("\n\n")
               .trim();
 
-            core.setOutput("body", `${mergedBody}\n`);
+            core.setOutput("body", `${dedupeChangeEntries(mergedBody)}\n`);
 
       - name: Write release notes
         shell: bash
