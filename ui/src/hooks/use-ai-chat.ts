@@ -896,7 +896,7 @@ export function useAIChat() {
       language: string,
       abortSignal?: AbortSignal
     ) => {
-      const clusterName = localStorage.getItem('current-cluster') || ''
+      const clusterName = localStorage.getItem('current-cluster-id') || ''
       const requestLanguage = (language || '').trim() || 'en'
 
       const response = await fetch(

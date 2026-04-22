@@ -30,7 +30,8 @@ export function ClusterSelector() {
   const { t } = useTranslation()
   const {
     clusters,
-    currentCluster,
+    currentClusterId,
+    currentClusterData,
     setCurrentCluster,
     isSwitching,
     isLoading,
@@ -48,8 +49,6 @@ export function ClusterSelector() {
       </div>
     )
   }
-
-  const currentClusterData = clusters.find((c) => c.name === currentCluster)
 
   return (
     <DropdownMenu>
@@ -105,8 +104,8 @@ export function ClusterSelector() {
         ) : null}
         {clusters.map((cluster) => (
           <DropdownMenuItem
-            key={cluster.name}
-            onClick={() => setCurrentCluster(cluster.name)}
+            key={cluster.id}
+            onClick={() => setCurrentCluster(String(cluster.id))}
             disabled={!!cluster.error}
             className="flex items-center justify-between"
           >
@@ -129,12 +128,15 @@ export function ClusterSelector() {
                   'text-xs truncate',
                   cluster.error ? 'text-red-500' : 'text-muted-foreground'
                 )}
-                title={cluster.error}
+                title={cluster.error || cluster.apiServer}
               >
-                {cluster.error || cluster.version}
+                {cluster.error ||
+                  cluster.apiServer ||
+                  cluster.version ||
+                  t('globalSearch.clusterReady')}
               </span>
             </div>
-            {currentCluster === cluster.name && (
+            {currentClusterId === String(cluster.id) && (
               <IconCheck className="h-4 w-4" />
             )}
           </DropdownMenuItem>

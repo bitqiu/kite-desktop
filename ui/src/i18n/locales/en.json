@@ -668,6 +668,7 @@
     "resourceType": "cluster",
     "actions": {
       "add": "Add Cluster",
+      "import": "Import Cluster",
       "testConnection": "Test Connection",
       "testingConnection": "Testing...",
       "edit": "Edit",
@@ -675,6 +676,7 @@
     },
     "table": {
       "name": "Name",
+      "apiServer": "API Server",
       "type": "Type",
       "status": "Status",
       "prometheus": "Prometheus",
@@ -694,6 +696,9 @@
     },
     "messages": {
       "created": "Cluster created successfully",
+      "imported": "Kubeconfig imported successfully",
+      "importSkipped": "No new clusters were imported because matching API Server addresses already exist",
+      "importError": "Failed to import kubeconfig",
       "updated": "Cluster updated successfully",
       "deleted": "Cluster deleted successfully",
       "testing": "Testing cluster connection...",

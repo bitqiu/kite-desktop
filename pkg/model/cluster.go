@@ -2,7 +2,7 @@ package model
 
 type Cluster struct {
 	Model
-	Name          string       `json:"name" gorm:"type:varchar(100);uniqueIndex;not null"`
+	Name          string       `json:"name" gorm:"type:varchar(100);not null"`
 	Description   string       `json:"description" gorm:"type:text"`
 	Config        SecretString `json:"config" gorm:"type:text"`
 	PrometheusURL string       `json:"prometheus_url,omitempty" gorm:"type:varchar(255)"`
@@ -61,4 +61,12 @@ func ListClusters() ([]*Cluster, error) {
 
 func CountClusters() (count int64, err error) {
 	return count, DB.Model(&Cluster{}).Count(&count).Error
+}
+
+func HasDefaultCluster() (bool, error) {
+	var count int64
+	if err := DB.Model(&Cluster{}).Where("is_default = ?", true).Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }

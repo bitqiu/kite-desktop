@@ -42,7 +42,9 @@ type ImportClustersRequest struct {
 }
 
 type ClusterInfo struct {
+	ID        uint   `json:"id"`
 	Name      string `json:"name"`
+	APIServer string `json:"apiServer,omitempty"`
 	Version   string `json:"version"`
 	IsDefault bool   `json:"isDefault"`
 	Error     string `json:"error,omitempty"`

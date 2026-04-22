@@ -31,7 +31,7 @@ function ClusterSwitchProbe() {
       {(value) => (
         <button
           type="button"
-          onClick={() => value?.setCurrentCluster('cluster-b')}
+          onClick={() => value?.setCurrentCluster('2')}
         >
           switch
         </button>
@@ -73,6 +73,7 @@ describe('ClusterProvider', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     localStorage.setItem('current-cluster', 'stale-cluster')
+    localStorage.setItem('current-cluster-id', '99')
     const removeItemSpy = vi.spyOn(localStorage, 'removeItem')
     const setItemSpy = vi.spyOn(localStorage, 'setItem')
 
@@ -82,6 +83,7 @@ describe('ClusterProvider', () => {
       expect(screen.getByTestId('cluster-state')).toHaveTextContent('none|false')
     )
 
+    expect(removeItemSpy).toHaveBeenCalledWith('current-cluster-id')
     expect(removeItemSpy).toHaveBeenCalledWith('current-cluster')
     expect(setItemSpy).not.toHaveBeenCalledWith(
       'current-cluster',
@@ -95,8 +97,8 @@ describe('ClusterProvider', () => {
       ok: true,
       status: 200,
       json: async () => [
-        { name: 'cluster-a', isDefault: true },
-        { name: 'cluster-b', isDefault: false },
+        { id: 1, name: 'cluster-a', isDefault: true },
+        { id: 2, name: 'cluster-b', isDefault: false },
       ],
     })
     vi.stubGlobal('fetch', fetchMock)

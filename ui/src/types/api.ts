@@ -351,6 +351,7 @@ export interface RelatedResources {
 export interface Cluster {
   id: number
   name: string
+  apiServer?: string
   description?: string
   version?: string
   config?: string

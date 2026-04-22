@@ -802,6 +802,7 @@
     "resourceType": "集群",
     "actions": {
       "add": "添加集群",
+      "import": "导入集群",
       "testConnection": "测试连接",
       "testingConnection": "测试中...",
       "edit": "编辑",
@@ -810,6 +811,7 @@
     },
     "table": {
       "name": "名称",
+      "apiServer": "API Server",
       "type": "类型",
       "status": "状态",
       "prometheus": "Prometheus",
@@ -829,6 +831,9 @@
     },
     "messages": {
       "created": "集群创建成功",
+      "imported": "kubeconfig 导入成功",
+      "importSkipped": "未导入新的集群，已存在相同的集群",
+      "importError": "导入 kubeconfig 失败",
       "updated": "集群更新成功",
       "deleted": "集群删除成功",
       "testing": "正在测试集群连接...",

@@ -115,6 +115,11 @@ export interface DesktopAppInfo {
   paths: DesktopAppPaths
 }
 
+export interface DesktopImportKubeconfigResult {
+  ok: boolean
+  importedCount: number
+}
+
 export interface DesktopUpdateAsset {
   name: string
   downloadUrl: string
@@ -460,15 +465,21 @@ export async function copyTextToClipboard(text: string): Promise<void> {
   }
 }
 
-export async function importKubeconfig(content?: string): Promise<boolean> {
-  const imported = await invokeDesktopAction('/api/desktop/import-kubeconfig', {
-    content,
-  })
-  if (imported) {
+export async function importKubeconfig(
+  content?: string
+): Promise<DesktopImportKubeconfigResult> {
+  const imported = await postDesktop<DesktopImportKubeconfigResult>(
+    '/api/desktop/import-kubeconfig',
+    {
+      content,
+    }
+  )
+  if (imported.ok) {
     trackEvent('kubeconfig_import', {
       runtime: 'desktop',
       mode: content?.trim() ? 'text_import' : 'file_dialog',
       page: getCurrentAnalyticsPageKey(),
+      imported_count: imported.importedCount,
     })
   }
   return imported

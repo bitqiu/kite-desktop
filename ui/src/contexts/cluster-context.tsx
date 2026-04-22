@@ -15,7 +15,9 @@ const recentClustersStorageKey = 'recent-clusters'
 interface ClusterContextType {
   clusters: Cluster[]
   currentCluster: string | null
-  setCurrentCluster: (clusterName: string) => void
+  currentClusterId: string | null
+  currentClusterData: Cluster | null
+  setCurrentCluster: (clusterId: string) => void
   isLoading: boolean
   isSwitching?: boolean
   error: Error | null
@@ -28,19 +30,19 @@ export const ClusterContext = createContext<ClusterContextType | undefined>(
 export const ClusterProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  const [currentCluster, setCurrentClusterState] = useState<string | null>(
-    localStorage.getItem('current-cluster')
+  const [currentClusterId, setCurrentClusterIdState] = useState<string | null>(
+    localStorage.getItem('current-cluster-id')
   )
   const queryClient = useQueryClient()
   const [isSwitching, setIsSwitching] = useState(false)
 
-  const saveRecentCluster = (clusterName: string) => {
+  const saveRecentCluster = (clusterId: string) => {
     const recentClusters = JSON.parse(
       localStorage.getItem(recentClustersStorageKey) || '[]'
     ) as string[]
     const nextRecentClusters = [
-      clusterName,
-      ...recentClusters.filter((name) => name !== clusterName),
+      clusterId,
+      ...recentClusters.filter((id) => id !== clusterId),
     ].slice(0, 8)
     localStorage.setItem(
       recentClustersStorageKey,
@@ -49,12 +51,12 @@ export const ClusterProvider: React.FC<{ children: React.ReactNode }> = ({
   }
 
   useEffect(() => {
-    if (currentCluster) {
-      setClusterCookie(currentCluster)
+    if (currentClusterId) {
+      setClusterCookie(currentClusterId)
       return
     }
     clearClusterCookie()
-  }, [currentCluster])
+  }, [currentClusterId])
 
   // Fetch clusters from API (this request shouldn't need cluster header)
   const {
@@ -90,46 +92,64 @@ export const ClusterProvider: React.FC<{ children: React.ReactNode }> = ({
     staleTime: 5 * 60 * 1000, // 5 minutes
   })
 
+  const currentClusterData =
+    clusters.find((cluster) => String(cluster.id) === currentClusterId) ?? null
+  const currentCluster = currentClusterData?.name ?? null
+
   // Set default cluster if none is selected
   useEffect(() => {
-    if (clusters.length > 0 && !currentCluster) {
+    if (clusters.length > 0 && !currentClusterId) {
       const defaultCluster = clusters.find((c) => c.isDefault)
       if (defaultCluster) {
-        setCurrentClusterState(defaultCluster.name)
-        setClusterCookie(defaultCluster.name)
+        const defaultClusterId = String(defaultCluster.id)
+        setCurrentClusterIdState(defaultClusterId)
+        setClusterCookie(defaultClusterId)
+        localStorage.setItem('current-cluster-id', defaultClusterId)
         localStorage.setItem('current-cluster', defaultCluster.name)
       } else {
         // If no default cluster, use the first one
-        setCurrentClusterState(clusters[0].name)
+        const firstClusterId = String(clusters[0].id)
+        setCurrentClusterIdState(firstClusterId)
+        localStorage.setItem('current-cluster-id', firstClusterId)
         localStorage.setItem('current-cluster', clusters[0].name)
-        setClusterCookie(clusters[0].name)
+        setClusterCookie(firstClusterId)
       }
     }
-    if (clusters.length === 0 && currentCluster) {
-      setCurrentClusterState(null)
+    if (clusters.length === 0 && currentClusterId) {
+      setCurrentClusterIdState(null)
+      localStorage.removeItem('current-cluster-id')
       localStorage.removeItem('current-cluster')
       clearClusterCookie()
     }
     if (
-      currentCluster &&
+      currentClusterId &&
       clusters.length > 0 &&
-      !clusters.some((c) => c.name === currentCluster)
+      !clusters.some((c) => String(c.id) === currentClusterId)
     ) {
       // If current cluster is not in the list, reset it
-      setCurrentClusterState(null)
+      setCurrentClusterIdState(null)
+      localStorage.removeItem('current-cluster-id')
       localStorage.removeItem('current-cluster')
       clearClusterCookie()
     }
-  }, [clusters, currentCluster])
+  }, [clusters, currentClusterId])
 
-  const setCurrentCluster = (clusterName: string) => {
-    if (clusterName !== currentCluster && !isSwitching) {
+  const setCurrentCluster = (clusterId: string) => {
+    const nextCluster = clusters.find(
+      (cluster) => String(cluster.id) === clusterId
+    )
+    if (!nextCluster) {
+      return
+    }
+
+    if (clusterId !== currentClusterId && !isSwitching) {
       try {
         setIsSwitching(true)
-        setCurrentClusterState(clusterName)
-        localStorage.setItem('current-cluster', clusterName)
-        saveRecentCluster(clusterName)
-        setClusterCookie(clusterName)
+        setCurrentClusterIdState(clusterId)
+        localStorage.setItem('current-cluster-id', clusterId)
+        localStorage.setItem('current-cluster', nextCluster.name)
+        saveRecentCluster(clusterId)
+        setClusterCookie(clusterId)
         trackEvent('cluster_switch', {
           runtime: 'desktop',
           page: getCurrentAnalyticsPageKey(),
@@ -142,7 +162,7 @@ export const ClusterProvider: React.FC<{ children: React.ReactNode }> = ({
             },
           })
           setIsSwitching(false)
-          toast.success(`Switched to cluster: ${clusterName}`, {
+          toast.success(`Switched to cluster: ${nextCluster.name}`, {
             id: 'cluster-switch',
           })
         }, 300)
@@ -159,6 +179,8 @@ export const ClusterProvider: React.FC<{ children: React.ReactNode }> = ({
   const value: ClusterContextType = {
     clusters,
     currentCluster,
+    currentClusterId,
+    currentClusterData,
     setCurrentCluster,
     isLoading,
     isSwitching,

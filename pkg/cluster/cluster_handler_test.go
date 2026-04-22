@@ -4,14 +4,40 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/eryajf/kite-desktop/pkg/common"
 	"github.com/eryajf/kite-desktop/pkg/model"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
+
+func TestMain(m *testing.M) {
+	tempDir, err := os.MkdirTemp("", "kite-cluster-tests-*")
+	if err != nil {
+		panic(err)
+	}
+
+	common.DBType = "sqlite"
+	common.DBDSN = filepath.Join(tempDir, "cluster-test.db")
+	model.InitDB()
+
+	exitCode := m.Run()
+	if err := os.RemoveAll(tempDir); err != nil {
+		fmt.Fprintf(os.Stderr, "cleanup temp dir %q failed: %v\n", tempDir, err)
+		if exitCode == 0 {
+			exitCode = 1
+		}
+	}
+
+	os.Exit(exitCode)
+}
 
 func TestFormatClusterConnectionError(t *testing.T) {
 	t.Parallel()
@@ -170,3 +196,252 @@ func TestTestClusterConnectionReturnsReadableError(t *testing.T) {
 		t.Fatalf("expected errorDetail, got empty response: %+v", response)
 	}
 }
+
+func TestImportClustersFromKubeconfigSkipsClustersWithSameAPIServer(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	setupClusterHandlerTestDB(t)
+
+	if err := model.AddCluster(&model.Cluster{
+		Name:      "existing",
+		Config:    model.SecretString(existingClusterKubeconfig),
+		IsDefault: true,
+		Enable:    true,
+	}); err != nil {
+		t.Fatalf("AddCluster() error = %v", err)
+	}
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/admin/clusters/import",
+		strings.NewReader(`{"config":"`+jsonEscape(t, sameServerDifferentNameKubeconfig)+`","inCluster":false}`),
+	)
+	ctx.Request.Header.Set("Content-Type", "application/json")
+
+	(&ClusterManager{}).ImportClustersFromKubeconfig(ctx)
+
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d, body = %s", recorder.Code, http.StatusCreated, recorder.Body.String())
+	}
+
+	count, err := model.CountClusters()
+	if err != nil {
+		t.Fatalf("CountClusters() error = %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("CountClusters() = %d, want 1", count)
+	}
+
+	if _, err := model.GetClusterByName("same-server-new-name"); !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("GetClusterByName(same-server-new-name) err = %v, want record not found", err)
+	}
+
+	existing, err := model.GetClusterByName("existing")
+	if err != nil {
+		t.Fatalf("GetClusterByName(existing) error = %v", err)
+	}
+	if !existing.IsDefault {
+		t.Fatal("existing default cluster lost default flag")
+	}
+}
+
+func TestImportClustersFromKubeconfigAppendsClustersWithDifferentAPIServer(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	setupClusterHandlerTestDB(t)
+
+	if err := model.AddCluster(&model.Cluster{
+		Name:      "existing",
+		Config:    model.SecretString(existingClusterKubeconfig),
+		IsDefault: true,
+		Enable:    true,
+	}); err != nil {
+		t.Fatalf("AddCluster() error = %v", err)
+	}
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/admin/clusters/import",
+		strings.NewReader(`{"config":"`+jsonEscape(t, additionalClusterKubeconfig)+`","inCluster":false}`),
+	)
+	ctx.Request.Header.Set("Content-Type", "application/json")
+
+	(&ClusterManager{}).ImportClustersFromKubeconfig(ctx)
+
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d, body = %s", recorder.Code, http.StatusCreated, recorder.Body.String())
+	}
+
+	count, err := model.CountClusters()
+	if err != nil {
+		t.Fatalf("CountClusters() error = %v", err)
+	}
+	if count != 2 {
+		t.Fatalf("CountClusters() = %d, want 2", count)
+	}
+
+	imported, err := model.GetClusterByName("new-dev")
+	if err != nil {
+		t.Fatalf("GetClusterByName(new-dev) error = %v", err)
+	}
+	if imported.IsDefault {
+		t.Fatal("imported cluster unexpectedly became default")
+	}
+
+	existing, err := model.GetClusterByName("existing")
+	if err != nil {
+		t.Fatalf("GetClusterByName(existing) error = %v", err)
+	}
+	if !existing.IsDefault {
+		t.Fatal("existing default cluster lost default flag")
+	}
+}
+
+func TestImportClustersFromKubeconfigAppendsSameNameClusterWithDifferentAPIServer(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	setupClusterHandlerTestDB(t)
+
+	if err := model.AddCluster(&model.Cluster{
+		Name:      "existing",
+		Config:    model.SecretString(existingClusterKubeconfig),
+		IsDefault: true,
+		Enable:    true,
+	}); err != nil {
+		t.Fatalf("AddCluster() error = %v", err)
+	}
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/admin/clusters/import",
+		strings.NewReader(`{"config":"`+jsonEscape(t, sameNameDifferentServerKubeconfig)+`","inCluster":false}`),
+	)
+	ctx.Request.Header.Set("Content-Type", "application/json")
+
+	(&ClusterManager{}).ImportClustersFromKubeconfig(ctx)
+
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d, body = %s", recorder.Code, http.StatusCreated, recorder.Body.String())
+	}
+
+	count, err := model.CountClusters()
+	if err != nil {
+		t.Fatalf("CountClusters() error = %v", err)
+	}
+	if count != 2 {
+		t.Fatalf("CountClusters() = %d, want 2", count)
+	}
+
+	if _, err := model.GetClusterByName("existing"); err != nil {
+		t.Fatalf("GetClusterByName(existing) error = %v", err)
+	}
+	var importedClusters []model.Cluster
+	if err := model.DB.Where("name = ?", "existing").Find(&importedClusters).Error; err != nil {
+		t.Fatalf("Find(imported clusters) error = %v", err)
+	}
+	if len(importedClusters) != 2 {
+		t.Fatalf("len(importedClusters) = %d, want 2", len(importedClusters))
+	}
+	defaultCount := 0
+	for _, cluster := range importedClusters {
+		if cluster.IsDefault {
+			defaultCount++
+		}
+	}
+	if defaultCount != 1 {
+		t.Fatalf("defaultCount = %d, want 1", defaultCount)
+	}
+}
+
+func setupClusterHandlerTestDB(t *testing.T) {
+	t.Helper()
+
+	if err := model.DB.Exec("DELETE FROM clusters").Error; err != nil {
+		t.Fatalf("cleanup clusters failed: %v", err)
+	}
+}
+
+func jsonEscape(t *testing.T, input string) string {
+	t.Helper()
+
+	encoded, err := json.Marshal(input)
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	return strings.Trim(string(encoded), `"`)
+}
+
+const additionalClusterKubeconfig = `apiVersion: v1
+kind: Config
+current-context: new-dev
+clusters:
+- name: new-dev
+  cluster:
+    server: https://example.invalid
+users:
+- name: new-dev
+  user:
+    token: test-token
+contexts:
+- name: new-dev
+  context:
+    cluster: new-dev
+    user: new-dev
+`
+
+const existingClusterKubeconfig = `apiVersion: v1
+kind: Config
+current-context: existing
+clusters:
+- name: existing
+  cluster:
+    server: https://demo.example.com
+users:
+- name: existing
+  user:
+    token: existing-token
+contexts:
+- name: existing
+  context:
+    cluster: existing
+    user: existing
+`
+
+const sameServerDifferentNameKubeconfig = `apiVersion: v1
+kind: Config
+current-context: same-server-new-name
+clusters:
+- name: same-server-new-name
+  cluster:
+    server: https://demo.example.com:443/
+users:
+- name: same-server-new-name
+  user:
+    token: same-server-token
+contexts:
+- name: same-server-new-name
+  context:
+    cluster: same-server-new-name
+    user: same-server-new-name
+`
+
+const sameNameDifferentServerKubeconfig = `apiVersion: v1
+kind: Config
+current-context: existing
+clusters:
+- name: existing
+  cluster:
+    server: https://another.example.com
+users:
+- name: existing
+  user:
+    token: another-token
+contexts:
+- name: existing
+  context:
+    cluster: existing
+    user: existing
+`

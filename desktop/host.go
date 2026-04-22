@@ -900,7 +900,7 @@ func (h *desktopHost) clearIgnoredUpdateVersion() error {
 	return h.updateStore.clearIgnoredVersion()
 }
 
-func (h *desktopHost) importKubeconfigFromDialog() error {
+func (h *desktopHost) importKubeconfigFromDialog() (int, error) {
 	dialog := h.app.Dialog.OpenFile().
 		CanChooseFiles(true).
 		CanChooseDirectories(false)
@@ -917,43 +917,40 @@ func (h *desktopHost) importKubeconfigFromDialog() error {
 
 	path, err := dialog.PromptForSingleSelection()
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if path == "" {
-		return nil
+		return 0, nil
 	}
 
 	content, err := os.ReadFile(path)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
-	if err := h.importKubeconfigContent(string(content)); err != nil {
-		return err
-	}
-	return nil
+	return h.importKubeconfigContent(string(content))
 }
 
-func (h *desktopHost) importKubeconfigContent(content string) error {
+func (h *desktopHost) importKubeconfigContent(content string) (int, error) {
 	payload, err := json.Marshal(common.ImportClustersRequest{
 		Config:    content,
 		InCluster: false,
 	})
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	endpoint := h.baseURL + apiPath("/api/v1/admin/clusters/import")
 	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
-		return err
+		return 0, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer func() {
 		_ = resp.Body.Close()
@@ -962,18 +959,26 @@ func (h *desktopHost) importKubeconfigContent(content string) error {
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
 		if len(body) == 0 {
-			return fmt.Errorf("import kubeconfig failed with status %d", resp.StatusCode)
+			return 0, fmt.Errorf("import kubeconfig failed with status %d", resp.StatusCode)
 		}
 		var errResp struct {
 			Error string `json:"error"`
 		}
 		if json.Unmarshal(body, &errResp) == nil && strings.TrimSpace(errResp.Error) != "" {
-			return fmt.Errorf("%s", errResp.Error)
+			return 0, fmt.Errorf("%s", errResp.Error)
 		}
-		return fmt.Errorf("%s", strings.TrimSpace(string(body)))
+		return 0, fmt.Errorf("%s", strings.TrimSpace(string(body)))
 	}
 
-	return nil
+	var okResp struct {
+		Message       string `json:"message"`
+		ImportedCount int    `json:"importedCount"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&okResp); err != nil && err != io.EOF {
+		return 0, err
+	}
+
+	return okResp.ImportedCount, nil
 }
 
 func (h *desktopHost) showInfoDialog(title, message string) {
@@ -1024,11 +1029,16 @@ func buildApplicationMenu(h *desktopHost, devMode bool) *application.Menu {
 		if h == nil {
 			return
 		}
-		if err := h.importKubeconfigFromDialog(); err != nil {
+		importedCount, err := h.importKubeconfigFromDialog()
+		if err != nil {
 			h.showErrorDialog("Import kubeconfig failed", err.Error())
 			return
 		}
-		h.reloadMainWindow()
+		if importedCount == 0 {
+			h.navigate(fmt.Sprintf("/settings?tab=clusters&desktopImport=skipped&desktopImportTs=%d", time.Now().UnixNano()))
+			return
+		}
+		h.navigate(fmt.Sprintf("/settings?tab=clusters&desktopImport=success&desktopImportTs=%d", time.Now().UnixNano()))
 	})
 	fileMenu.Add("Open Config Directory").OnClick(func(ctx *application.Context) {
 		if h == nil {
@@ -1168,11 +1178,16 @@ func (h *desktopHost) setupSystemTray() {
 		h.focusMainWindow()
 	})
 	menu.Add("Import kubeconfig").OnClick(func(ctx *application.Context) {
-		if err := h.importKubeconfigFromDialog(); err != nil {
+		importedCount, err := h.importKubeconfigFromDialog()
+		if err != nil {
 			h.showErrorDialog("Import kubeconfig failed", err.Error())
 			return
 		}
-		h.reloadMainWindow()
+		if importedCount == 0 {
+			h.navigate(fmt.Sprintf("/settings?tab=clusters&desktopImport=skipped&desktopImportTs=%d", time.Now().UnixNano()))
+			return
+		}
+		h.navigate(fmt.Sprintf("/settings?tab=clusters&desktopImport=success&desktopImportTs=%d", time.Now().UnixNano()))
 	})
 	menu.Add("Open Config Directory").OnClick(func(ctx *application.Context) {
 		if err := h.openConfigDir(); err != nil {

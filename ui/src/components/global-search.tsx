@@ -155,7 +155,7 @@ export function GlobalSearch({ open, mode, onOpenChange }: GlobalSearchProps) {
   const { openSearch } = useGlobalSearch()
   const {
     clusters,
-    currentCluster,
+    currentClusterId,
     setCurrentCluster,
     isSwitching,
     isLoading: isClusterLoading,
@@ -354,19 +354,20 @@ export function GlobalSearch({ open, mode, onOpenChange }: GlobalSearchProps) {
     }
 
     const recentClusterOrder = new Map(
-      recentClusters.map((clusterName, index) => [clusterName, index])
+      recentClusters.map((clusterId, index) => [clusterId, index])
     )
 
     const sortedClusters = [...clusters].sort((left, right) => {
-      if (left.name === currentCluster) {
+      if (String(left.id) === currentClusterId) {
         return -1
       }
-      if (right.name === currentCluster) {
+      if (String(right.id) === currentClusterId) {
         return 1
       }
 
-      const leftRecentIndex = recentClusterOrder.get(left.name) ?? Infinity
-      const rightRecentIndex = recentClusterOrder.get(right.name) ?? Infinity
+      const leftRecentIndex = recentClusterOrder.get(String(left.id)) ?? Infinity
+      const rightRecentIndex =
+        recentClusterOrder.get(String(right.id)) ?? Infinity
       if (leftRecentIndex !== rightRecentIndex) {
         return leftRecentIndex - rightRecentIndex
       }
@@ -380,16 +381,17 @@ export function GlobalSearch({ open, mode, onOpenChange }: GlobalSearchProps) {
 
     const normalizedQuery = query.trim().toLowerCase()
     const items = sortedClusters.map((cluster) => ({
-      id: `cluster-${cluster.name}`,
+      id: `cluster-${cluster.id}`,
       cluster,
       clusterNameText: cluster.name.toLowerCase(),
       searchText: [
         cluster.name,
+        cluster.apiServer,
         cluster.description,
         cluster.version,
         cluster.error,
         cluster.isDefault ? 'default 默认' : '',
-        cluster.name === currentCluster ? 'current 当前' : '',
+        String(cluster.id) === currentClusterId ? 'current 当前' : '',
         'cluster clusters switch 集群 切换',
       ]
         .filter(Boolean)
@@ -397,6 +399,7 @@ export function GlobalSearch({ open, mode, onOpenChange }: GlobalSearchProps) {
         .toLowerCase(),
       subtitle:
         cluster.error ||
+        cluster.apiServer ||
         cluster.description ||
         cluster.version ||
         t('globalSearch.clusterReady'),
@@ -404,8 +407,8 @@ export function GlobalSearch({ open, mode, onOpenChange }: GlobalSearchProps) {
         !!cluster.error ||
         isSwitching ||
         isClusterLoading ||
-        cluster.name === currentCluster,
-      isCurrent: cluster.name === currentCluster,
+        String(cluster.id) === currentClusterId,
+      isCurrent: String(cluster.id) === currentClusterId,
     }))
 
     if (mode === 'cluster') {
@@ -436,7 +439,7 @@ export function GlobalSearch({ open, mode, onOpenChange }: GlobalSearchProps) {
       : []
   }, [
     clusters,
-    currentCluster,
+    currentClusterId,
     isClusterLoading,
     isSwitching,
     mode,
@@ -568,24 +571,20 @@ export function GlobalSearch({ open, mode, onOpenChange }: GlobalSearchProps) {
       : t('globalSearch.description')
 
   const handleClusterSelect = useCallback(
-    (clusterName: string) => {
-      if (
-        isSwitching ||
-        isClusterLoading ||
-        clusterName === currentCluster
-      ) {
+    (clusterId: string) => {
+      if (isSwitching || isClusterLoading || clusterId === currentClusterId) {
         return
       }
       trackDesktopEvent('global_search_select', {
         mode,
         item_type: 'cluster',
       })
-      setCurrentCluster(clusterName)
+      setCurrentCluster(clusterId)
       onOpenChange(false)
       setQuery('')
     },
     [
-      currentCluster,
+      currentClusterId,
       isClusterLoading,
       isSwitching,
       mode,
@@ -713,7 +712,9 @@ export function GlobalSearch({ open, mode, onOpenChange }: GlobalSearchProps) {
                     key={item.id}
                     value={item.clusterNameText}
                     disabled={item.disabled}
-                    onSelect={() => handleClusterSelect(item.cluster.name)}
+                    onSelect={() =>
+                      handleClusterSelect(String(item.cluster.id))
+                    }
                     className="flex items-center gap-3 py-3"
                   >
                     <IconServer className="h-4 w-4 text-sidebar-primary" />

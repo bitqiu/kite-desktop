@@ -42,6 +42,11 @@ type desktopActionResponse struct {
 	OK bool `json:"ok"`
 }
 
+type desktopImportKubeconfigResponse struct {
+	OK            bool `json:"ok"`
+	ImportedCount int  `json:"importedCount"`
+}
+
 type desktopAppPaths struct {
 	ConfigDir string `json:"configDir"`
 	LogsDir   string `json:"logsDir"`
@@ -772,18 +777,24 @@ func (d *desktopBridge) handleImportKubeconfig(c *gin.Context) {
 		return
 	}
 
-	var err error
+	var (
+		err           error
+		importedCount int
+	)
 	if strings.TrimSpace(req.Content) != "" {
-		err = d.host.importKubeconfigContent(req.Content)
+		importedCount, err = d.host.importKubeconfigContent(req.Content)
 	} else {
-		err = d.host.importKubeconfigFromDialog()
+		importedCount, err = d.host.importKubeconfigFromDialog()
 	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, desktopActionResponse{OK: true})
+	c.JSON(http.StatusOK, desktopImportKubeconfigResponse{
+		OK:            true,
+		ImportedCount: importedCount,
+	})
 }
 
 func (d *desktopBridge) resolveURL(rawURL string) (*url.URL, bool, error) {

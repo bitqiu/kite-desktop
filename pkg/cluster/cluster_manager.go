@@ -1,10 +1,10 @@
 package cluster
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -12,7 +12,6 @@ import (
 	"github.com/eryajf/kite-desktop/pkg/kube"
 	"github.com/eryajf/kite-desktop/pkg/model"
 	"github.com/eryajf/kite-desktop/pkg/prometheus"
-	"gorm.io/gorm"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -20,7 +19,9 @@ import (
 )
 
 type ClientSet struct {
+	ID         uint
 	Name       string
+	APIServer  string
 	Version    string // Kubernetes version
 	K8sClient  *kube.K8sClient
 	PromClient *prometheus.Client
@@ -31,9 +32,9 @@ type ClientSet struct {
 }
 
 type ClusterManager struct {
-	clusters       map[string]*ClientSet
-	errors         map[string]string
-	defaultContext string
+	clusters         map[uint]*ClientSet
+	errors           map[uint]string
+	defaultClusterID uint
 }
 
 func createClientSetInCluster(name, prometheusURL string) (*ClientSet, error) {
@@ -173,18 +174,45 @@ func (cm *ClusterManager) GetClientSet(clusterName string) (*ClientSet, error) {
 		return nil, fmt.Errorf("no clusters available")
 	}
 	if clusterName == "" {
-		if cm.defaultContext == "" {
+		if cm.defaultClusterID == 0 {
 			// If no default context is set, return the first available cluster
 			for _, cs := range cm.clusters {
 				return cs, nil
 			}
 		}
-		return cm.GetClientSet(cm.defaultContext)
+		return cm.GetClientSetByID(cm.defaultClusterID)
 	}
-	if cluster, ok := cm.clusters[clusterName]; ok {
+
+	if clusterID, err := strconv.ParseUint(clusterName, 10, 32); err == nil {
+		return cm.GetClientSetByID(uint(clusterID))
+	}
+
+	for _, cluster := range cm.clusters {
+		if cluster.Name == clusterName {
+			return cluster, nil
+		}
+	}
+
+	return nil, fmt.Errorf("cluster not found: %s", clusterName)
+}
+
+func (cm *ClusterManager) GetClientSetByID(clusterID uint) (*ClientSet, error) {
+	if len(cm.clusters) == 0 {
+		return nil, fmt.Errorf("no clusters available")
+	}
+	if clusterID == 0 {
+		if cm.defaultClusterID == 0 {
+			for _, cs := range cm.clusters {
+				return cs, nil
+			}
+			return nil, fmt.Errorf("no clusters available")
+		}
+		clusterID = cm.defaultClusterID
+	}
+	if cluster, ok := cm.clusters[clusterID]; ok {
 		return cluster, nil
 	}
-	return nil, fmt.Errorf("cluster not found: %s", clusterName)
+	return nil, fmt.Errorf("cluster not found: %d", clusterID)
 }
 
 func ImportClustersFromKubeconfig(kubeconfig *clientcmdapi.Config) int64 {
@@ -192,8 +220,43 @@ func ImportClustersFromKubeconfig(kubeconfig *clientcmdapi.Config) int64 {
 		return 0
 	}
 
+	hasDefaultCluster, err := model.HasDefaultCluster()
+	if err != nil {
+		klog.Warningf("failed to check existing default cluster: %v", err)
+		hasDefaultCluster = false
+	}
+
+	existingAPIServers := make(map[string]struct{})
+	clusters, err := model.ListClusters()
+	if err != nil {
+		klog.Warningf("failed to list clusters for api server dedupe: %v", err)
+	} else {
+		for _, existing := range clusters {
+			apiServer, err := getNormalizedAPIServerAddress(string(existing.Config))
+			if err != nil || apiServer == "" {
+				continue
+			}
+			existingAPIServers[apiServer] = struct{}{}
+		}
+	}
+
 	importedCount := 0
 	for contextName, context := range kubeconfig.Contexts {
+		clusterConfig, ok := kubeconfig.Clusters[context.Cluster]
+		if !ok || clusterConfig == nil {
+			continue
+		}
+
+		apiServer, err := normalizeAPIServerAddress(clusterConfig.Server)
+		if err != nil {
+			klog.Warningf("failed to normalise api server for cluster %s: %v", contextName, err)
+			continue
+		}
+		if _, exists := existingAPIServers[apiServer]; exists {
+			klog.Infof("Skipped importing cluster %s because api server %s already exists", contextName, apiServer)
+			continue
+		}
+
 		config := clientcmdapi.NewConfig()
 		config.Contexts = map[string]*clientcmdapi.Context{
 			contextName: context,
@@ -212,20 +275,80 @@ func ImportClustersFromKubeconfig(kubeconfig *clientcmdapi.Config) int64 {
 		cluster := model.Cluster{
 			Name:      contextName,
 			Config:    model.SecretString(configStr),
-			IsDefault: contextName == kubeconfig.CurrentContext,
+			IsDefault: !hasDefaultCluster && contextName == kubeconfig.CurrentContext,
 		}
-		if _, err := model.GetClusterByName(contextName); err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				if err := model.AddCluster(&cluster); err != nil {
-					continue
-				}
-				importedCount++
-				klog.Infof("Imported cluster success: %s", contextName)
-			}
+		if err := model.AddCluster(&cluster); err != nil {
 			continue
 		}
+		if cluster.IsDefault {
+			hasDefaultCluster = true
+		}
+		existingAPIServers[apiServer] = struct{}{}
+		importedCount++
+		klog.Infof("Imported cluster success: %s", cluster.Name)
 	}
 	return int64(importedCount)
+}
+
+func getNormalizedAPIServerAddress(config string) (string, error) {
+	if strings.TrimSpace(config) == "" {
+		return "", nil
+	}
+
+	kubeconfig, err := clientcmd.Load([]byte(config))
+	if err != nil {
+		return "", err
+	}
+	if kubeconfig.CurrentContext == "" {
+		return "", nil
+	}
+
+	ctx, ok := kubeconfig.Contexts[kubeconfig.CurrentContext]
+	if !ok || ctx == nil {
+		return "", nil
+	}
+	clusterConfig, ok := kubeconfig.Clusters[ctx.Cluster]
+	if !ok || clusterConfig == nil {
+		return "", nil
+	}
+
+	return normalizeAPIServerAddress(clusterConfig.Server)
+}
+
+func normalizeAPIServerAddress(rawURL string) (string, error) {
+	rawURL = strings.TrimSpace(rawURL)
+	if rawURL == "" {
+		return "", nil
+	}
+
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return "", err
+	}
+	if parsed.Scheme == "" || parsed.Host == "" {
+		return "", fmt.Errorf("invalid api server url: %s", rawURL)
+	}
+
+	scheme := strings.ToLower(parsed.Scheme)
+	host := strings.ToLower(parsed.Hostname())
+	port := parsed.Port()
+	switch {
+	case port != "":
+	case scheme == "https":
+		port = "443"
+	case scheme == "http":
+		port = "80"
+	}
+
+	path := strings.TrimRight(parsed.EscapedPath(), "/")
+	if path == "/" {
+		path = ""
+	}
+
+	if port != "" {
+		return fmt.Sprintf("%s://%s:%s%s", scheme, host, port, path), nil
+	}
+	return fmt.Sprintf("%s://%s%s", scheme, host, path), nil
 }
 
 var (
@@ -253,7 +376,8 @@ func syncClusters(cm *ClusterManager) error {
 		time.Sleep(5 * time.Second)
 		return err
 	}
-	dbClusterMap := make(map[string]interface{})
+	dbClusterMap := make(map[uint]struct{})
+	cm.defaultClusterID = 0
 	type buildResult struct {
 		cluster   *model.Cluster
 		clientSet *ClientSet
@@ -261,20 +385,20 @@ func syncClusters(cm *ClusterManager) error {
 	}
 	buildQueue := make([]*model.Cluster, 0)
 	for _, cluster := range clusters {
-		dbClusterMap[cluster.Name] = cluster
+		dbClusterMap[cluster.ID] = struct{}{}
 		if cluster.IsDefault {
-			cm.defaultContext = cluster.Name
+			cm.defaultClusterID = cluster.ID
 		}
-		current, currentExist := cm.clusters[cluster.Name]
+		current, currentExist := cm.clusters[cluster.ID]
 		if shouldUpdateCluster(current, cluster) {
 			if currentExist {
-				delete(cm.clusters, cluster.Name)
+				delete(cm.clusters, cluster.ID)
 				current.K8sClient.Stop(cluster.Name)
 			}
 			if cluster.Enable {
 				buildQueue = append(buildQueue, cluster)
 			} else {
-				delete(cm.errors, cluster.Name)
+				delete(cm.errors, cluster.ID)
 			}
 		}
 	}
@@ -297,21 +421,21 @@ func syncClusters(cm *ClusterManager) error {
 	for result := range results {
 		if result.err != nil {
 			klog.Errorf("Failed to build k8s client for cluster %s, in cluster: %t, err: %v", result.cluster.Name, result.cluster.InCluster, result.err)
-			cm.errors[result.cluster.Name] = result.err.Error()
+			cm.errors[result.cluster.ID] = result.err.Error()
 			continue
 		}
-		delete(cm.errors, result.cluster.Name)
-		cm.clusters[result.cluster.Name] = result.clientSet
+		delete(cm.errors, result.cluster.ID)
+		cm.clusters[result.cluster.ID] = result.clientSet
 	}
-	for name, clientSet := range cm.clusters {
-		if _, ok := dbClusterMap[name]; !ok {
-			delete(cm.clusters, name)
-			clientSet.K8sClient.Stop(name)
+	for id, clientSet := range cm.clusters {
+		if _, ok := dbClusterMap[id]; !ok {
+			delete(cm.clusters, id)
+			clientSet.K8sClient.Stop(clientSet.Name)
 		}
 	}
-	for name := range cm.errors {
-		if _, ok := dbClusterMap[name]; !ok {
-			delete(cm.errors, name)
+	for id := range cm.errors {
+		if _, ok := dbClusterMap[id]; !ok {
+			delete(cm.errors, id)
 		}
 	}
 
@@ -362,15 +486,28 @@ func shouldUpdateCluster(cs *ClientSet, cluster *model.Cluster) bool {
 
 func buildClientSet(cluster *model.Cluster) (*ClientSet, error) {
 	if cluster.InCluster {
-		return createClientSetInCluster(cluster.Name, cluster.PrometheusURL)
+		clientSet, err := createClientSetInCluster(cluster.Name, cluster.PrometheusURL)
+		if err != nil {
+			return nil, err
+		}
+		clientSet.ID = cluster.ID
+		return clientSet, nil
 	}
-	return createClientSetFromConfig(cluster.Name, string(cluster.Config), cluster.PrometheusURL)
+	clientSet, err := createClientSetFromConfig(cluster.Name, string(cluster.Config), cluster.PrometheusURL)
+	if err != nil {
+		return nil, err
+	}
+	clientSet.ID = cluster.ID
+	if apiServer, apiErr := getNormalizedAPIServerAddress(string(cluster.Config)); apiErr == nil {
+		clientSet.APIServer = apiServer
+	}
+	return clientSet, nil
 }
 
 func NewClusterManager() (*ClusterManager, error) {
 	cm := new(ClusterManager)
-	cm.clusters = make(map[string]*ClientSet)
-	cm.errors = make(map[string]string)
+	cm.clusters = make(map[uint]*ClientSet)
+	cm.errors = make(map[uint]string)
 	go func() {
 		ticker := time.NewTicker(1 * time.Minute)
 		defer ticker.Stop()

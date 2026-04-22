@@ -174,8 +174,8 @@ func TestDiscoveryPrometheusURL(t *testing.T) {
 func TestGetClientSet(t *testing.T) {
 	t.Run("returns error when no clusters exist", func(t *testing.T) {
 		cm := &ClusterManager{
-			clusters: map[string]*ClientSet{},
-			errors:   map[string]string{},
+			clusters: map[uint]*ClientSet{},
+			errors:   map[uint]string{},
 		}
 
 		_, err := cm.GetClientSet("")
@@ -185,14 +185,14 @@ func TestGetClientSet(t *testing.T) {
 	})
 
 	t.Run("returns default cluster when set", func(t *testing.T) {
-		expected := &ClientSet{Name: "default"}
+		expected := &ClientSet{ID: 1, Name: "default"}
 		cm := &ClusterManager{
-			clusters: map[string]*ClientSet{
-				"default": expected,
-				"other":   {Name: "other"},
+			clusters: map[uint]*ClientSet{
+				1: expected,
+				2: {ID: 2, Name: "other"},
 			},
-			errors:         map[string]string{},
-			defaultContext: "default",
+			errors:           map[uint]string{},
+			defaultClusterID: 1,
 		}
 
 		got, err := cm.GetClientSet("")
@@ -205,12 +205,12 @@ func TestGetClientSet(t *testing.T) {
 	})
 
 	t.Run("falls back to first cluster when default context is empty", func(t *testing.T) {
-		expected := &ClientSet{Name: "first"}
+		expected := &ClientSet{ID: 1, Name: "first"}
 		cm := &ClusterManager{
-			clusters: map[string]*ClientSet{
-				"first": expected,
+			clusters: map[uint]*ClientSet{
+				1: expected,
 			},
-			errors: map[string]string{},
+			errors: map[uint]string{},
 		}
 
 		got, err := cm.GetClientSet("")
@@ -223,12 +223,12 @@ func TestGetClientSet(t *testing.T) {
 	})
 
 	t.Run("returns named cluster", func(t *testing.T) {
-		expected := &ClientSet{Name: "target"}
+		expected := &ClientSet{ID: 7, Name: "target"}
 		cm := &ClusterManager{
-			clusters: map[string]*ClientSet{
-				"target": expected,
+			clusters: map[uint]*ClientSet{
+				7: expected,
 			},
-			errors: map[string]string{},
+			errors: map[uint]string{},
 		}
 
 		got, err := cm.GetClientSet("target")
@@ -242,10 +242,10 @@ func TestGetClientSet(t *testing.T) {
 
 	t.Run("returns error for missing cluster", func(t *testing.T) {
 		cm := &ClusterManager{
-			clusters: map[string]*ClientSet{
-				"target": {Name: "target"},
+			clusters: map[uint]*ClientSet{
+				7: {ID: 7, Name: "target"},
 			},
-			errors: map[string]string{},
+			errors: map[uint]string{},
 		}
 
 		_, err := cm.GetClientSet("missing")

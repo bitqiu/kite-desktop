@@ -298,7 +298,7 @@ export function Terminal({
 
     // WebSocket connection
     setIsConnected(false)
-    const currentCluster = localStorage.getItem('current-cluster')
+    const currentCluster = localStorage.getItem('current-cluster-id')
     const wsPath =
       type === 'pod'
         ? appendClusterNameParam(

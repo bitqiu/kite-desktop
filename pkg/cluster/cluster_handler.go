@@ -56,25 +56,38 @@ func (e *clusterConnectionError) Error() string {
 }
 
 func (cm *ClusterManager) GetClusters(c *gin.Context) {
-	result := make([]common.ClusterInfo, 0, len(cm.clusters))
-	for name, cluster := range cm.clusters {
-		result = append(result, common.ClusterInfo{
-			Name:      name,
-			Version:   cluster.Version,
-			IsDefault: name == cm.defaultContext,
-		})
+	clusters, err := model.ListClusters()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
-	for name, errMsg := range cm.errors {
+
+	result := make([]common.ClusterInfo, 0, len(clusters))
+	for _, cluster := range clusters {
+		apiServer, _ := getNormalizedAPIServerAddress(string(cluster.Config))
+		version := ""
+		if clientSet, exists := cm.clusters[cluster.ID]; exists {
+			version = clientSet.Version
+		}
 		result = append(result, common.ClusterInfo{
-			Name:      name,
-			Version:   "",
-			IsDefault: false,
-			Error:     errMsg,
+			ID:        cluster.ID,
+			Name:      cluster.Name,
+			APIServer: apiServer,
+			Version:   version,
+			IsDefault: cluster.IsDefault,
 		})
 	}
 	sort.Slice(result, func(i, j int) bool {
+		if result[i].Name == result[j].Name {
+			return result[i].APIServer < result[j].APIServer
+		}
 		return result[i].Name < result[j].Name
 	})
+	for i := range result {
+		if errMsg, exists := cm.errors[result[i].ID]; exists {
+			result[i].Error = errMsg
+		}
+	}
 	c.JSON(200, result)
 }
 
@@ -94,14 +107,18 @@ func (cm *ClusterManager) GetClusterList(c *gin.Context) {
 			"enabled":       cluster.Enable,
 			"inCluster":     cluster.InCluster,
 			"isDefault":     cluster.IsDefault,
+			"apiServer":     "",
 			"prometheusURL": cluster.PrometheusURL,
 			"config":        "",
 		}
+		if apiServer, err := getNormalizedAPIServerAddress(string(cluster.Config)); err == nil {
+			clusterInfo["apiServer"] = apiServer
+		}
 
-		if clientSet, exists := cm.clusters[cluster.Name]; exists {
+		if clientSet, exists := cm.clusters[cluster.ID]; exists {
 			clusterInfo["version"] = clientSet.Version
 		}
-		if errMsg, exists := cm.errors[cluster.Name]; exists {
+		if errMsg, exists := cm.errors[cluster.ID]; exists {
 			clusterInfo["error"] = errMsg
 		}
 
@@ -121,14 +138,6 @@ func (cm *ClusterManager) CreateCluster(c *gin.Context) {
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "name is required"})
-		return
-	}
-
-	if _, err := model.GetClusterByName(req.Name); err == nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "cluster already exists"})
-		return
-	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -430,16 +439,6 @@ func (cm *ClusterManager) ImportClustersFromKubeconfig(c *gin.Context) {
 		return
 	}
 
-	cc, err := model.CountClusters()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	if cc > 0 {
-		c.JSON(http.StatusForbidden, gin.H{"error": "import not allowed when clusters exist"})
-		return
-	}
-
 	if clusterReq.InCluster {
 		// In-cluster config
 		cluster := &model.Cluster{
@@ -454,7 +453,10 @@ func (cm *ClusterManager) ImportClustersFromKubeconfig(c *gin.Context) {
 			return
 		}
 		_ = requestClusterSync(true)
-		c.JSON(http.StatusCreated, gin.H{"message": fmt.Sprintf("imported %d clusters successfully", 1)})
+		c.JSON(http.StatusCreated, gin.H{
+			"message":       fmt.Sprintf("imported %d clusters successfully", 1),
+			"importedCount": 1,
+		})
 		return
 	}
 
@@ -466,5 +468,8 @@ func (cm *ClusterManager) ImportClustersFromKubeconfig(c *gin.Context) {
 
 	importedCount := ImportClustersFromKubeconfig(kubeconfig)
 	_ = requestClusterSync(true)
-	c.JSON(http.StatusCreated, gin.H{"message": fmt.Sprintf("imported %d clusters successfully", importedCount)})
+	c.JSON(http.StatusCreated, gin.H{
+		"message":       fmt.Sprintf("imported %d clusters successfully", importedCount),
+		"importedCount": importedCount,
+	})
 }

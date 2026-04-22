@@ -182,9 +182,9 @@ export const createLogsSSEStream = (
     params.append('sinceSeconds', options.sinceSeconds.toString())
   }
 
-  const currentCluster = localStorage.getItem('current-cluster')
+  const currentCluster = localStorage.getItem('current-cluster-id')
   if (currentCluster) {
-    params.append('x-cluster-name', currentCluster)
+    params.append('x-cluster-id', currentCluster)
   }
 
   const endpoint = `${API_BASE_URL}/logs/${namespace}/${podName}?${params.toString()}`
@@ -484,9 +484,9 @@ export const useLogsWebSocket = (
       params.append('labelSelector', options.labelSelector)
     }
 
-    const currentCluster = localStorage.getItem('current-cluster')
+    const currentCluster = localStorage.getItem('current-cluster-id')
     if (currentCluster) {
-      params.append('x-cluster-name', currentCluster)
+      params.append('x-cluster-id', currentCluster)
     }
 
     const wsPath = `/api/v1/logs/${namespace}/${podName}/ws?${params.toString()}`

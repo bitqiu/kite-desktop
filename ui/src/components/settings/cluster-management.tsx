@@ -1,8 +1,15 @@
-import { useCallback, useMemo, useState } from 'react'
-import { IconEdit, IconPlus, IconServer, IconTrash } from '@tabler/icons-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  IconEdit,
+  IconFileImport,
+  IconPlus,
+  IconServer,
+  IconTrash,
+} from '@tabler/icons-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ColumnDef } from '@tanstack/react-table'
 import { useTranslation } from 'react-i18next'
+import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { Cluster } from '@/types/api'
@@ -18,6 +25,8 @@ import {
 } from '@/lib/api'
 import { trackDesktopEvent } from '@/lib/analytics'
 import { invalidateClusterQueries } from '@/lib/cluster-query'
+import { importKubeconfig } from '@/lib/desktop'
+import { useRuntime } from '@/contexts/runtime-context'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -45,12 +54,45 @@ function getClusterAnalyticsPayload(
 export function ClusterManagement() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const { isDesktop } = useRuntime()
 
   const { data: clusters = [], isLoading, error } = useClusterList()
 
   const [showClusterDialog, setShowClusterDialog] = useState(false)
   const [editingCluster, setEditingCluster] = useState<Cluster | null>(null)
   const [deletingCluster, setDeletingCluster] = useState<Cluster | null>(null)
+
+  useEffect(() => {
+    const importResult = searchParams.get('desktopImport')
+    if (importResult !== 'success' && importResult !== 'skipped') {
+      return
+    }
+
+    void invalidateClusterQueries(queryClient)
+
+    toast.success(
+      importResult === 'success'
+        ? t(
+            'clusterManagement.messages.imported',
+            'Kubeconfig imported successfully'
+          )
+        : t(
+            'clusterManagement.messages.importSkipped',
+            'No new clusters were imported because matching clusters already exist'
+          )
+    )
+
+    setSearchParams(
+      (prev) => {
+        const nextParams = new URLSearchParams(prev)
+        nextParams.delete('desktopImport')
+        nextParams.delete('desktopImportTs')
+        return nextParams
+      },
+      { replace: true }
+    )
+  }, [queryClient, searchParams, setSearchParams, t])
 
   const getClusterTypeBadge = useCallback(
     (cluster: Cluster) => {
@@ -137,6 +179,15 @@ export function ClusterManagement() {
           }
           return <Badge variant="secondary">{cluster.version || '-'}</Badge>
         },
+      },
+      {
+        id: 'apiServer',
+        header: t('clusterManagement.table.apiServer', 'API Server'),
+        cell: ({ row: { original: cluster } }) => (
+          <div className="max-w-[20rem] break-all text-sm text-muted-foreground">
+            {cluster.apiServer || '-'}
+          </div>
+        ),
       },
       {
         id: 'type',
@@ -324,6 +375,39 @@ export function ClusterManagement() {
     deleteMutation.mutate(deletingCluster.id)
   }
 
+  const handleImportCluster = async () => {
+    try {
+      const result = await importKubeconfig()
+
+      await invalidateClusterQueries(queryClient)
+
+      if (result.importedCount > 0) {
+        toast.success(
+          t(
+            'clusterManagement.messages.imported',
+            'Kubeconfig imported successfully'
+          )
+        )
+      } else {
+        toast.success(
+          t(
+            'clusterManagement.messages.importSkipped',
+            'No new clusters were imported because matching clusters already exist'
+          )
+        )
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t(
+              'clusterManagement.messages.importError',
+              'Failed to import kubeconfig'
+            )
+      )
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-8">
@@ -355,16 +439,28 @@ export function ClusterManagement() {
                 {t('clusterManagement.title', 'Cluster Management')}
               </CardTitle>
             </div>
-            <Button
-              onClick={() => {
-                setEditingCluster(null)
-                setShowClusterDialog(true)
-              }}
-              className="gap-2"
-            >
-              <IconPlus className="h-4 w-4" />
-              {t('clusterManagement.actions.add', 'Add Cluster')}
-            </Button>
+            <div className="flex items-center gap-2">
+              {isDesktop && (
+                <Button
+                  variant="outline"
+                  onClick={() => void handleImportCluster()}
+                  className="gap-2"
+                >
+                  <IconFileImport className="h-4 w-4" />
+                  {t('clusterManagement.actions.import', 'Import Cluster')}
+                </Button>
+              )}
+              <Button
+                onClick={() => {
+                  setEditingCluster(null)
+                  setShowClusterDialog(true)
+                }}
+                className="gap-2"
+              >
+                <IconPlus className="h-4 w-4" />
+                {t('clusterManagement.actions.add', 'Add Cluster')}
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>

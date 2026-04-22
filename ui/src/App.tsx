@@ -33,13 +33,13 @@ const FloatingTerminal = lazy(async () => {
 
 function ClusterGate({ children }: { children: ReactNode }) {
   const { t } = useTranslation()
-  const { currentCluster, isLoading, error } = useCluster()
+  const { currentClusterId, isLoading, error } = useCluster()
 
   useEffect(() => {
     apiClient.setClusterProvider(() => {
-      return currentCluster || localStorage.getItem('current-cluster')
+      return currentClusterId || localStorage.getItem('current-cluster-id')
     })
-  }, [currentCluster])
+  }, [currentClusterId])
 
   if (isLoading) {
     return (

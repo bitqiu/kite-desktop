@@ -391,8 +391,8 @@ export function useResourcesWatch<T extends ResourceType>(
       params.append('labelSelector', options.labelSelector)
     if (options?.fieldSelector)
       params.append('fieldSelector', options.fieldSelector)
-    const cluster = localStorage.getItem('current-cluster')
-    if (cluster) params.append('x-cluster-name', cluster)
+    const cluster = localStorage.getItem('current-cluster-id')
+    if (cluster) params.append('x-cluster-id', cluster)
     return withSubPath(
       `${API_BASE_URL}/${resource}/${ns}/watch?${params.toString()}`
     )

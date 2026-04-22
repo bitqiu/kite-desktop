@@ -3,18 +3,16 @@ import { describe, expect, it } from 'vitest'
 import { clearClusterCookie, setClusterCookie } from './cluster-cookie'
 
 describe('cluster cookie helpers', () => {
-  it('encodes non-ascii cluster names before writing cookies', () => {
-    setClusterCookie('生产集群')
+  it('writes the selected cluster id to cookies', () => {
+    setClusterCookie('12')
 
-    expect(document.cookie).toContain(
-      'x-cluster-name=%E7%94%9F%E4%BA%A7%E9%9B%86%E7%BE%A4'
-    )
+    expect(document.cookie).toContain('x-cluster-id=12')
   })
 
   it('clears the cluster cookie', () => {
-    setClusterCookie('cluster-a')
+    setClusterCookie('12')
     clearClusterCookie()
 
-    expect(document.cookie).not.toContain('x-cluster-name=')
+    expect(document.cookie).not.toContain('x-cluster-id=')
   })
 })
