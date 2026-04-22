@@ -1,3 +1,5 @@
+简体中文 |[English](README.md)
+
 <div align="center">
 
 <img src="./docs/src/banner.svg" alt="Kite Desktop Banner" width="900">
