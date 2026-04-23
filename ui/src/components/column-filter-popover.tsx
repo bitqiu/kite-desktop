@@ -96,12 +96,12 @@ function FacetedFilterContent<TData>({
   const listRef = useRef<HTMLDivElement>(null)
   const [highlightIndex, setHighlightIndex] = useState(-1)
 
+  const filterValue = column.getFilterValue()
   const selectedValues = useMemo(() => {
-    const val = column.getFilterValue()
-    return Array.isArray(val)
-      ? new Set<string>(val as string[])
+    return Array.isArray(filterValue)
+      ? new Set<string>(filterValue as string[])
       : new Set<string>()
-  }, [column.getFilterValue()])
+  }, [filterValue])
 
   const sortedEntries = useMemo(() => {
     return Array.from(facetedValues.entries())

@@ -55,7 +55,8 @@ vi.mock('sonner', () => ({
   },
 }))
 
-import * as GeneralManagementModule from './general-management'
+import { GeneralManagement } from './general-management'
+import * as GeneralManagementRuntime from './general-management-runtime'
 
 function renderComponent() {
   const queryClient = new QueryClient({
@@ -67,7 +68,7 @@ function renderComponent() {
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <GeneralManagementModule.GeneralManagement />
+      <GeneralManagement />
     </QueryClientProvider>
   )
 }
@@ -100,7 +101,7 @@ describe('GeneralManagement', () => {
   it('reloads the app after analytics is disabled so the injected script is removed', async () => {
     const user = userEvent.setup()
     const reloadSpy = vi
-      .spyOn(GeneralManagementModule.browserRuntime, 'reloadWindow')
+      .spyOn(GeneralManagementRuntime.browserRuntime, 'reloadWindow')
       .mockImplementation(() => undefined)
 
     updateGeneralSetting.mockResolvedValue({
@@ -138,7 +139,7 @@ describe('GeneralManagement', () => {
   it('does not reload when analytics setting is unchanged', async () => {
     const user = userEvent.setup()
     const reloadSpy = vi
-      .spyOn(GeneralManagementModule.browserRuntime, 'reloadWindow')
+      .spyOn(GeneralManagementRuntime.browserRuntime, 'reloadWindow')
       .mockImplementation(() => undefined)
 
     updateGeneralSetting.mockResolvedValue({
@@ -175,16 +176,16 @@ describe('GeneralManagement', () => {
 describe('shouldReloadForAnalyticsChange', () => {
   it('only reloads when the analytics toggle actually changes', () => {
     expect(
-      GeneralManagementModule.shouldReloadForAnalyticsChange(true, false)
+      GeneralManagementRuntime.shouldReloadForAnalyticsChange(true, false)
     ).toBe(true)
     expect(
-      GeneralManagementModule.shouldReloadForAnalyticsChange(false, true)
+      GeneralManagementRuntime.shouldReloadForAnalyticsChange(false, true)
     ).toBe(true)
     expect(
-      GeneralManagementModule.shouldReloadForAnalyticsChange(true, true)
+      GeneralManagementRuntime.shouldReloadForAnalyticsChange(true, true)
     ).toBe(false)
     expect(
-      GeneralManagementModule.shouldReloadForAnalyticsChange(undefined, false)
+      GeneralManagementRuntime.shouldReloadForAnalyticsChange(undefined, false)
     ).toBe(false)
   })
 })

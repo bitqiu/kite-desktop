@@ -1034,6 +1034,7 @@ export function useAIChat() {
       saveCurrentSession,
       streamChat,
       currentCluster,
+      currentSessionId,
       getToolStatusContent,
       t,
     ]

@@ -74,7 +74,7 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
     return () => {
       active = false
     }
-  }, [])
+  }, [queryClient])
 
   return (
     <RuntimeContext.Provider value={state}>{children}</RuntimeContext.Provider>

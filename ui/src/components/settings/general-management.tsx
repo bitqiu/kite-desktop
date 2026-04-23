@@ -10,6 +10,10 @@ import {
   updateGeneralSetting,
   useGeneralSetting,
 } from '@/lib/api'
+import {
+  browserRuntime,
+  shouldReloadForAnalyticsChange,
+} from './general-management-runtime'
 import { translateError } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -44,22 +48,6 @@ interface GeneralSettingsFormData {
   nodeTerminalImage: string
   enableAnalytics: boolean
   enableVersionCheck: boolean
-}
-
-export function shouldReloadForAnalyticsChange(
-  previousEnableAnalytics: boolean | undefined,
-  nextEnableAnalytics: boolean
-) {
-  return (
-    typeof previousEnableAnalytics === 'boolean' &&
-    previousEnableAnalytics !== nextEnableAnalytics
-  )
-}
-
-export const browserRuntime = {
-  reloadWindow() {
-    window.location.reload()
-  },
 }
 
 export function GeneralManagement() {
